@@ -84,3 +84,32 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
 ### Time log
 
 - 03:25 start; read MACHINE/SHARED/ISOLATION; package checks.
+- 03:30 skeleton committed and pushed (private repo). CI blocked by billing (MORNING.md #1).
+- 03:33–03:40 stock bringup: two failures (no controller params on Lyrical; double spawn race).
+- 03:47 own sim.launch.py; ci_smoke.sh PASS in 17 s locally. CHECKPOINT 1 at 03:48.
+
+### Stock ur_sim_control.launch.py on Lyrical — findings (verified 2026-10-28)
+
+1. ros2_control 6.10.1 controller nodes only receive parameters through the controller manager
+   parameter `<controller>.params_file` (set by `spawner --param-file` or in the CM YAML). The
+   stock UR launch sets neither → `joint_trajectory_controller` fails with
+   "Length of parameter 'joints' is '0'". `strings libcontroller_manager.so | grep params_file`
+   → `{}.params_file`. Fix used: inject `params_file: <yaml itself>` per controller
+   (`scripts/lib/inject_params_file.py`, same logic inside `sim.launch.py`).
+2. The stock spawner for the inactive branch still passes `--stopped`; the 6.10.1 spawner only
+   knows `--inactive` (from `ros2 run controller_manager spawner -h`).
+3. Duplicate spawn: `ros_gz_sim create` WARN "Waiting for service [/world/empty/create]",
+   then Gazebo logged `Created entity [10] named [ur]` and `Created entity [39] named [ur_0]`.
+   Two robots overlap (ODE trimesh-trimesh overflow, -150 N·m stall) and two
+   `/controller_manager` nodes exist. Gazebo needed ~20 s to boot on the loaded laptop.
+   Fix: wait for `/world/bench/create` in `gz service -l`, then spawn once with
+   `-allow_renaming false`.
+4. `gz_ros_control` warns "Desired controller update period (0.002 s) is slower than the gazebo
+   simulation period (0.001 s)" → update_rate 500 Hz on a 1 ms step is honoured as a 2-step
+   decimation (this is the intended setup, not an error).
+
+### Commands that worked
+
+- Build: `flock ~/work/.locks/build.lock scripts/build.sh`
+- Smoke: `flock ~/work/.locks/gazebo.lock timeout 240 scripts/ci_smoke.sh`
+- No Gazebo left: `pgrep -af '[b]in/gz sim'` (the bracket stops pgrep matching its own shell).
