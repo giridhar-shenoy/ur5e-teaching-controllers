@@ -56,11 +56,13 @@ jobs:
 
       - name: colcon build
         run: >-
-          $IN_CONTAINER "source /opt/ros/lyrical/setup.bash &&
-          colcon build --symlink-install --parallel-workers 2
-          --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"
+          $IN_CONTAINER "scripts/build.sh"
 
       - name: colcon test
         run: >-
           $IN_CONTAINER "source /opt/ros/lyrical/setup.bash &&
           colcon test --parallel-workers 2 && colcon test-result --verbose"
+
+      - name: Smoke test (Gazebo server-only, physics only)
+        run: >-
+          $IN_CONTAINER "LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a scripts/ci_smoke.sh"
