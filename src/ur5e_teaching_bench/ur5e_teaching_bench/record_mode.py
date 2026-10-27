@@ -31,9 +31,9 @@ PUSH_LINK = "ur::wrist_3_link"
 PAYLOAD_KG = 1.0  # record_gifs.sh launches the camera world with this actual payload
 # (start s, duration s, force xyz N) of the scripted push for the hand-guiding demo
 PUSHES = [
-    (0.8, 1.6, (0.0, 12.0, 0.0)),
-    (3.6, 1.6, (-12.0, 0.0, 0.0)),
-    (6.4, 1.6, (0.0, -12.0, 6.0)),
+    (0.8, 1.2, (0.0, 5.0, 0.0)),
+    (3.4, 1.2, (-5.0, 0.0, 0.0)),
+    (6.0, 1.2, (0.0, -5.0, 3.0)),
 ]
 
 

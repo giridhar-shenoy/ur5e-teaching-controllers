@@ -39,7 +39,7 @@ CONTROLLER = "gravity_comp_handguide_controller"
 DRIFT_S = 2.0
 RELEASE_WINDOW_S = 0.04
 G = 9.81
-PAYLOAD_COM_Z = 0.05  # same default as the xacro and the controller
+PAYLOAD_COM_Z = 0.03  # same default as the xacro and the controller (cube flush on the flange)
 CUBE_SIDE = 0.06
 
 

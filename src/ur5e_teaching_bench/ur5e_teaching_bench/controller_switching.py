@@ -71,7 +71,10 @@ class ControllerSwitcher:
 
     def activate_exclusive(self, name: str, timeout_s: float = 10.0) -> list[str]:
         """Activate `name`; returns the controllers that were deactivated to make room."""
-        self.ensure_configured(name)
+        # Every mode controller is loaded and configured first: the controller_manager refuses to
+        # activate a controller whose fallback_controllers are not at least inactive.
+        for controller in MODES.values():
+            self.ensure_configured(controller)
         states = self.controllers()
         target = states[name]
         if target.state == "active":
