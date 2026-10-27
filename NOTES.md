@@ -113,3 +113,8 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
 - Build: `flock ~/work/.locks/build.lock scripts/build.sh`
 - Smoke: `flock ~/work/.locks/gazebo.lock timeout 240 scripts/ci_smoke.sh`
 - No Gazebo left: `pgrep -af '[b]in/gz sim'` (the bracket stops pgrep matching its own shell).
+- 04:10 INCIDENT: the first `sim_session.sh stop` killed only the setsid/flock group; GNU
+  `timeout` had moved the launch into its own process group, so Gazebo kept running while the
+  lock was released. R2's queued benchmark then started its own Gazebo; both ran together for
+  ~1 min until I killed my session (`pkill -s <sid>`). Fixed: stop now signals timeout's group,
+  waits for it, and only then lets flock exit. Checked with `ps -eo pid,pgid,sid,args`.
