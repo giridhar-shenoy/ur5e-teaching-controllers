@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Giridhar J Shenoy. MIT License.
 #include "ur5e_teaching_controllers/effort_controller_base.hpp"
 
+#include <cmath>
 #include <limits>
 
 #include "dynamics/pinocchio_model.hpp"
@@ -56,6 +57,16 @@ bool EffortControllerBase::configure_common(
   qd_ = Eigen::VectorXd::Zero(n);
   tau_ = Eigen::VectorXd::Zero(n);
   effort_limit_ = model_->effort_limits();
+  for (Eigen::Index j = 0; j < effort_limit_.size(); ++j) {
+    // Saturation treats a limit <= 0 as "no limit"; a joint without a URDF effort limit must not
+    // silently end up unlimited.
+    if (!(std::isfinite(effort_limit_[j]) && effort_limit_[j] > 0.0)) {
+      RCLCPP_ERROR(
+        get_node()->get_logger(), "joint %s has no positive finite effort limit in the URDF",
+        joints_[static_cast<std::size_t>(j)].c_str());
+      return false;
+    }
+  }
 
   publish_decimation_ = std::max(1, publish_decimation);
   state_pub_ = std::make_unique<realtime_tools::RealtimePublisher<StateMsg>>(

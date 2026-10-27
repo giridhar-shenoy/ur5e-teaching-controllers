@@ -58,6 +58,8 @@ public:
   const Matrix6x & tip_jacobian(const Vector & q);
   /// Tip position in the base frame.
   Eigen::Vector3d tip_position(const Vector & q);
+  /// Tip orientation in the base frame.
+  Eigen::Matrix3d tip_rotation(const Vector & q);
 
   /// Limits read from the URDF, controller joint order.
   const Vector & effort_limits() const { return effort_limit_; }

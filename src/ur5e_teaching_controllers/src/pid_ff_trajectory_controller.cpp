@@ -2,6 +2,7 @@
 #include "ur5e_teaching_controllers/pid_ff_trajectory_controller.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 
 #include "control/control_laws.hpp"
@@ -31,19 +32,32 @@ CallbackReturn PidFfTrajectoryController::on_init()
   return CallbackReturn::SUCCESS;
 }
 
+namespace
+{
+// Per-joint arrays must have one entry per joint; generate_parameter_library cannot express
+// "same size as joints", so this is checked on configure and again for every runtime change.
+bool per_joint_sizes_ok(const pid_ff_trajectory_controller::Params & p)
+{
+  const std::size_t n = p.joints.size();
+  for (const auto * v : {&p.kp, &p.ki, &p.kd, &p.i_clamp, &p.max_velocity, &p.max_acceleration}) {
+    if (v->size() != n) {
+      return false;
+    }
+  }
+  return true;
+}
+}  // namespace
+
 CallbackReturn PidFfTrajectoryController::on_configure(const rclcpp_lifecycle::State &)
 {
   *params_ = param_listener_->get_params();
   const std::size_t n = params_->joints.size();
-  for (const auto * gains :
-       {&params_->kp, &params_->ki, &params_->kd, &params_->i_clamp, &params_->max_velocity,
-        &params_->max_acceleration}) {
-    if (gains->size() != n) {
-      RCLCPP_ERROR(
-        get_node()->get_logger(), "every per-joint parameter needs %zu entries (one per joint)", n);
-      return CallbackReturn::ERROR;
-    }
+  if (!per_joint_sizes_ok(*params_)) {
+    RCLCPP_ERROR(
+      get_node()->get_logger(), "every per-joint parameter needs %zu entries (one per joint)", n);
+    return CallbackReturn::ERROR;
   }
+  staged_ = std::make_unique<pid_ff_trajectory_controller::Params>(*params_);
   if (!configure_common(params_->joints, params_->tip_frame, params_->state_publish_decimation)) {
     return CallbackReturn::ERROR;
   }
@@ -107,6 +121,8 @@ void PidFfTrajectoryController::on_trajectory(const trajectory_msgs::msg::JointT
   }
   std::vector<std::vector<double>> waypoints;
   std::vector<double> times;
+  const auto & lower = model_->lower_limits();
+  const auto & upper = model_->upper_limits();
   for (const auto & point : msg.points) {
     if (point.positions.size() != msg.joint_names.size()) {
       RCLCPP_ERROR(get_node()->get_logger(), "trajectory rejected: point size mismatch");
@@ -115,6 +131,14 @@ void PidFfTrajectoryController::on_trajectory(const trajectory_msgs::msg::JointT
     std::vector<double> wp(n);
     for (std::size_t j = 0; j < n; ++j) {
       wp[j] = point.positions[order[j]];
+      const auto e = static_cast<Eigen::Index>(j);
+      // NaN fails both comparisons, so test for "inside" rather than "outside".
+      if (!(wp[j] >= lower[e] && wp[j] <= upper[e])) {
+        RCLCPP_ERROR(
+          get_node()->get_logger(), "trajectory rejected: %s target %f outside [%f, %f]",
+          joints_[j].c_str(), wp[j], lower[e], upper[e]);
+        return;
+      }
     }
     waypoints.push_back(std::move(wp));
     times.push_back(rclcpp::Duration(point.time_from_start).seconds());
@@ -128,6 +152,12 @@ void PidFfTrajectoryController::on_trajectory(const trajectory_msgs::msg::JointT
       get_node()->get_logger(),
       "trajectory accepted: %zu points, %.3f s requested, %.3f s profiled", waypoints.size(),
       times.back(), trajectory->duration());
+    // Keep a reference here so the realtime loop never drops the last one (no free in update()).
+    keep_alive_.erase(
+      std::remove_if(
+        keep_alive_.begin(), keep_alive_.end(), [](const auto & t) { return t.use_count() == 1; }),
+      keep_alive_.end());
+    keep_alive_.push_back(trajectory);
     pending_.set(Pending{next_id_++, std::move(trajectory)});
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "trajectory rejected: %s", e.what());
@@ -167,19 +197,40 @@ CallbackReturn PidFfTrajectoryController::on_deactivate(const rclcpp_lifecycle::
 return_type PidFfTrajectoryController::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
-  if (param_listener_->is_old(*params_)) {
-    *params_ = param_listener_->get_params();
-    apply_params();
+  // Non-blocking: skips this cycle if a parameter change is being written right now.
+  if (param_listener_->try_update_params(*staged_)) {
+    if (per_joint_sizes_ok(*staged_)) {
+      *params_ = *staged_;  // same-size vectors: copy-assignment does not allocate
+      apply_params();
+    } else {
+      RCLCPP_ERROR(
+        get_node()->get_logger(), "parameter change rejected: per-joint array size != %zu",
+        joints_.size());
+    }
   }
   read_state();
 
   // Adopt a newly received trajectory (never blocks: try_get skips if the callback holds it).
+  // The profile was built from the desired state the callback last saw; if that is no longer
+  // where we are (e.g. it was read before this activation), starting it would step q_des.
   pending_.try_get([this](const Pending & p) {
-    if (p.id != active_id_ && p.trajectory) {
-      active_id_ = p.id;
-      active_ = p.trajectory;
-      start_pending_ = true;
+    if (p.id == active_id_ || !p.trajectory) {
+      return;
     }
+    active_id_ = p.id;
+    const auto & start = p.trajectory->start();
+    double deviation = 0.0;
+    for (std::size_t j = 0; j < start.size(); ++j) {
+      deviation = std::max(deviation, std::abs(start[j] - q_des_[static_cast<Eigen::Index>(j)]));
+    }
+    if (deviation > params_->max_start_deviation) {
+      RCLCPP_ERROR(
+        get_node()->get_logger(),
+        "trajectory dropped: it starts %.4f rad from the current desired state", deviation);
+      return;
+    }
+    active_ = p.trajectory;
+    start_pending_ = true;
   });
   if (start_pending_) {
     t_start_ = time;

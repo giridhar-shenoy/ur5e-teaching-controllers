@@ -156,4 +156,11 @@ Eigen::Vector3d PinocchioModel::tip_position(const Vector & q)
   return data_.oMf[tip_frame_id_].translation();
 }
 
+Eigen::Matrix3d PinocchioModel::tip_rotation(const Vector & q)
+{
+  to_pinocchio(q, q_);
+  pinocchio::framesForwardKinematics(model_, data_, q_);
+  return data_.oMf[tip_frame_id_].rotation();
+}
+
 }  // namespace ur5e_teaching_controllers::dynamics

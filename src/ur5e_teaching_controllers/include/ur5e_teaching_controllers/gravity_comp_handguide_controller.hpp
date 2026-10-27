@@ -8,7 +8,8 @@
 // which can be changed at runtime and is pushed into the payload body's inertia. The arm floats
 // and a person (in simulation: an ApplyLinkWrench push on the wrist) moves it. Safety: a spring
 // pushes joints back near their URDF position limits, and the controller deactivates itself with
-// an error if any |qd| exceeds max_joint_velocity.
+// an error if any |qd| exceeds max_joint_velocity (configure a fallback_controllers entry so the
+// controller_manager hands the joints to a holding controller instead of leaving them limp).
 #pragma once
 
 #include <memory>
@@ -46,6 +47,7 @@ private:
 
   std::shared_ptr<gravity_comp_handguide_controller::ParamListener> param_listener_;
   std::unique_ptr<gravity_comp_handguide_controller::Params> params_;
+  std::unique_ptr<gravity_comp_handguide_controller::Params> staged_;  // runtime changes land here
   std::vector<double> qd_vec_;
   Eigen::VectorXd tau_model_;
 };

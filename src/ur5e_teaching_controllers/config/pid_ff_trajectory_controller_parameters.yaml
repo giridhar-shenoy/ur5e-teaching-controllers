@@ -60,7 +60,7 @@ pid_ff_trajectory_controller:
       gt_eq<>: [0.0]
   payload_com:
     type: double_array
-    default_value: [0.0, 0.0, 0.05]
+    default_value: [0.0, 0.0, 0.03]
     description: "Model payload centre of mass in tip_frame [m]."
     validation:
       fixed_size<>: [3]
@@ -69,7 +69,14 @@ pid_ff_trajectory_controller:
     default_value: 1.0
     description: "Torque saturation = scale * URDF effort limit."
     validation:
-      bounds<>: [0.0, 1.0]
+      gt<>: [0.0]
+      lt_eq<>: [1.0]
+  max_start_deviation:
+    type: double
+    default_value: 0.05
+    description: "Drop a new trajectory whose start is further than this from the current desired state [rad]."
+    validation:
+      gt<>: [0.0]
   state_publish_decimation:
     type: int
     default_value: 1
