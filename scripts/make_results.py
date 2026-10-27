@@ -137,8 +137,8 @@ def handguide(rows: list[dict]):
 def handguide_table(by) -> list[str]:
     lines = [
         "| Model / actual payload (kg) | Payload error (kg) "
-        "| TCP drift speed at 2 s (mm/s) "
-        "| TCP drift in 2 s (mm) | Effort to hold, F_z (N) | Expected (Δm·g, N) "
+        "| TCP drift speed at 1 s (mm/s) "
+        "| TCP drift in 1 s (mm) | Effort to hold, F_z (N) | Expected (Δm·g, N) "
         "| Regenerate with |",
         "|---|---|---|---|---|---|---|",
     ]
@@ -146,8 +146,8 @@ def handguide_table(by) -> list[str]:
         expected = float(rs[0]["expected_hold_force_z_n"])
         lines.append(
             f"| {model:g} / {actual:g} | {actual - model:+g} | "
-            f"{pm([r['drift_speed_2s_mps'] for r in rs], 1e3)} | "
-            f"{pm([r['drift_disp_2s_m'] for r in rs], 1e3)} | "
+            f"{pm([r['drift_speed_1s_mps'] for r in rs], 1e3)} | "
+            f"{pm([r['drift_disp_1s_m'] for r in rs], 1e3)} | "
             f"{pm([r['hold_force_z_n'] for r in rs])} | {expected:.2f} | "
             "`scripts/bench_handguide.sh` |"
         )
@@ -248,7 +248,7 @@ def plot_handguide(by, theme: str, path: Path):
     t = THEMES[theme]
     err = np.array([actual - model for model, actual in by])
     force = [np.array([float(r["hold_force_z_n"]) for r in rs]) for rs in by.values()]
-    drift = [np.array([float(r["drift_speed_2s_mps"]) for r in rs]) * 1e3 for rs in by.values()]
+    drift = [np.array([float(r["drift_speed_1s_mps"]) for r in rs]) * 1e3 for rs in by.values()]
     expected = np.array([float(rs[0]["expected_hold_force_z_n"]) for rs in by.values()])
 
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.2, 3.2), dpi=150)
@@ -284,7 +284,7 @@ def plot_handguide(by, theme: str, path: Path):
         capsize=3,
     )
     a2.set_xlabel("payload error, actual − model (kg)")
-    a2.set_ylabel("TCP drift speed at 2 s (mm/s)")
+    a2.set_ylabel("TCP drift speed at 1 s (mm/s)")
     a2.set_title("Drift after letting go", fontsize=9, loc="left", color=t["ink"])
     for ax in (a1, a2):
         style_axes(ax, t)
@@ -349,14 +349,15 @@ def results_markdown(track_rows, hg_rows) -> tuple[str, str]:
             "",
             f"`results/handguide.csv`: {stamp(hg_rows)}; {reps_h} repetitions per condition.",
             "",
-            "Method: per repetition the arm is homed (seeded offset as above), the hand-guiding",
-            "controller is activated with the model payload, and nobody touches it for 2 s.",
-            "*Drift* is the TCP linear speed |J(q) q̇| over [1.9, 2.0] s and the TCP displacement",
-            "at 2 s. *Effort to hold* is the force an operator would have to apply at tool0",
-            "to keep the arm still: F = −J(q)⁻ᵀ M(q) q̈, with q̈ fitted over the first 40 ms",
-            "after release (q̇ ≈ 0 there, so damping and Coriolis terms do not contribute) and",
-            "M(q) from Pinocchio",
-            "with the actual payload. Its z component should equal (m_actual − m_model)·g.",
+            "Method: per repetition the tracking controller holds the arm at a seeded random",
+            "offset (≤ 0.05 rad per joint) from home until its integrator has converged (3 s);",
+            "its torque is then what the simulated arm needs to stay put. The hand-guiding",
+            "controller then takes over with the model payload and nobody touches the arm.",
+            "*Effort to hold* is the tool force an operator must apply to keep the arm still,",
+            "F = J(q)⁻ᵀ (τ_hold − τ_handguide) at the release pose; its z component should",
+            "equal (m_actual − m_model)·g. *Drift* is the TCP linear speed |J(q) q̇| over",
+            "[0.9, 1.0] s after release and the TCP displacement at 1 s (by 2 s a 1 kg error has",
+            "carried the arm tens of centimetres, towards the floor when it sinks).",
             "",
             "![handguide](assets/handguide_light.png)",
             "",
