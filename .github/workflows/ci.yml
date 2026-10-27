@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    # The image is built from ./Dockerfile inside this job (no registry dependency).
+    # GitHub's `container:` key needs a pullable image, so the job starts one long-lived
+    # container from the freshly built image and runs every step in it with `docker exec`.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IMAGE: ur5e-teaching-controllers:ci
+      IN_CONTAINER: docker exec ci bash -c
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python (pre-commit)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint (pre-commit)
+        run: pip install pre-commit && pre-commit run --all-files --show-diff-on-failure
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (apt layers cached in the GHA cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start container
+        run: >-
+          docker run -d --name ci --user root -v ${{ github.workspace }}:/ws -w /ws
+          -e ROS_DOMAIN_ID=11 -e GZ_PARTITION=r1 -e MAKEFLAGS=-j4
+          --entrypoint sleep $IMAGE infinity
+
+      - name: rosdep install
+        run: >-
+          $IN_CONTAINER "source /opt/ros/lyrical/setup.bash && apt-get update &&
+          rosdep update --rosdistro lyrical &&
+          rosdep install --from-paths src --ignore-src -y --rosdistro lyrical"
+
+      - name: colcon build
+        run: >-
+          $IN_CONTAINER "source /opt/ros/lyrical/setup.bash &&
+          colcon build --symlink-install --parallel-workers 2
+          --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo"
+
+      - name: colcon test
+        run: >-
+          $IN_CONTAINER "source /opt/ros/lyrical/setup.bash &&
+          colcon test --parallel-workers 2 && colcon test-result --verbose"
