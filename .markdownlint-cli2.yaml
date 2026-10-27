@@ -1,0 +1,11 @@
+config:
+  MD013: false        # line length: prose is wrapped by hand
+  MD033: false        # inline HTML (GIF sizing in README)
+  MD041: false        # first line need not be a heading (README starts with a GIF)
+  MD024:
+    siblings_only: true
+ignores:
+  - "build/**"
+  - "install/**"
+  - "log/**"
+  - ".venv/**"
