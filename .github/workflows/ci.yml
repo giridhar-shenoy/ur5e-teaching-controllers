@@ -63,6 +63,10 @@ jobs:
           $IN_CONTAINER "source /opt/ros/lyrical/setup.bash &&
           colcon test --parallel-workers 2 && colcon test-result --verbose"
 
+      - name: Results tables match the CSVs
+        run: >-
+          $IN_CONTAINER "python3 scripts/make_results.py --check --no-plots"
+
       - name: Smoke test (Gazebo server-only, physics only)
         run: >-
           $IN_CONTAINER "LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a scripts/ci_smoke.sh"

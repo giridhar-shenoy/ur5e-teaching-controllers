@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-lyrical-ament-cmake-gmock \
       python3-colcon-common-extensions \
       python3-numpy \
+      python3-pytest \
+      python3-yaml \
       python3-matplotlib \
       python3-opencv \
       ffmpeg \
