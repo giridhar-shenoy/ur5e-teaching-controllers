@@ -1,0 +1,16 @@
+# colcon
+build/
+install/
+log/
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+# outputs (benchmark CSVs are committed under results/, raw runs are not)
+outputs/
+datasets/
+results/raw/
+*.bag
+*.mcap
