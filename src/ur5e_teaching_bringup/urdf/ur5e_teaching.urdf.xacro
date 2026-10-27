@@ -19,7 +19,7 @@
   <xacro:arg name="simulation_controllers" default=""/>
   <!-- Actual payload in the simulator: mass [kg] and centre-of-mass offset along tool0 z [m]. -->
   <xacro:arg name="payload_mass" default="0.0"/>
-  <xacro:arg name="payload_com_z" default="0.05"/>
+  <xacro:arg name="payload_com_z" default="0.03"/>
   <!-- Present for compatibility with ur_sim_control.launch.py's xacro call; unused here. -->
   <xacro:arg name="safety_limits" default="false"/>
   <xacro:arg name="safety_pos_margin" default="0.15"/>

@@ -7,6 +7,8 @@
 -->
 <sdf version="1.11">
   <world name="bench">
+    <!-- SDF's default is 9.8; Pinocchio (and the controllers) use 9.81. Make them agree. -->
+    <gravity>0 0 -9.81</gravity>
     <physics name="1ms" type="dart">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
