@@ -82,6 +82,7 @@ public:
   /// @param v_max      per-joint velocity limit [rad/s]
   /// @param a_max      per-joint acceleration limit [rad/s^2]
   /// Segments are stretched (never shortened) so that every limit holds.
+  /// @throws std::invalid_argument on size mismatches, decreasing times or non-finite values
   TrapezoidalTrajectory(
     const std::vector<double> & start, const std::vector<std::vector<double>> & waypoints,
     const std::vector<double> & times, const std::vector<double> & v_max,
@@ -94,12 +95,21 @@ public:
     if (waypoints.size() != times.size()) {
       throw std::invalid_argument("trapezoidal: one time per waypoint is required");
     }
+    const auto finite = [](const std::vector<double> & v) {
+      return std::all_of(v.begin(), v.end(), [](double x) { return std::isfinite(x); });
+    };
+    if (!finite(start) || !finite(times)) {
+      throw std::invalid_argument("trapezoidal: start and times must be finite");
+    }
     std::vector<double> from = start;
     double previous_request = 0.0;
     double t0 = 0.0;
     for (std::size_t k = 0; k < waypoints.size(); ++k) {
       if (waypoints[k].size() != n) {
         throw std::invalid_argument("trapezoidal: waypoint size must match the joint count");
+      }
+      if (!finite(waypoints[k])) {
+        throw std::invalid_argument("trapezoidal: waypoint positions must be finite");
       }
       const double requested = times[k] - previous_request;
       if (requested < 0.0) {
@@ -124,6 +134,12 @@ public:
   }
 
   std::size_t joint_count() const { return end_.size(); }
+  /// Position the trajectory starts from (empty if there are no segments).
+  const std::vector<double> & start() const
+  {
+    static const std::vector<double> kEmpty;
+    return segments_.empty() ? kEmpty : segments_.front().from;
+  }
   std::size_t segment_count() const { return segments_.size(); }
   double duration() const { return duration_; }
   double segment_duration(std::size_t k) const { return segments_.at(k).duration; }

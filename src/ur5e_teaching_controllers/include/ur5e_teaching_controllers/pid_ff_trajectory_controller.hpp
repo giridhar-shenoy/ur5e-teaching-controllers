@@ -6,7 +6,8 @@
 //
 // Input: trajectory_msgs/JointTrajectory on ~/joint_trajectory (topic only; no action server in
 // v0.1). Each segment is re-profiled as a velocity/acceleration-limited trapezoid; a new message
-// pre-empts the running trajectory and starts from the current desired state. Without a
+// pre-empts the running trajectory and starts from the current desired state (rest-to-rest
+// profiles: pre-empting while moving steps the desired velocity to zero, see docs). Without a
 // trajectory the controller holds the position it had when it was activated.
 #pragma once
 
@@ -65,6 +66,7 @@ private:
 
   std::shared_ptr<pid_ff_trajectory_controller::ParamListener> param_listener_;
   std::unique_ptr<pid_ff_trajectory_controller::Params> params_;
+  std::unique_ptr<pid_ff_trajectory_controller::Params> staged_;  // runtime changes land here
   std::vector<control::Pid> pid_;
 
   rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr trajectory_sub_;
@@ -72,6 +74,8 @@ private:
   std::uint64_t next_id_{1};
   std::uint64_t active_id_{0};
   std::shared_ptr<const profiles::TrapezoidalTrajectory> active_;
+  // Owned by the subscription callback only; see on_trajectory().
+  std::vector<std::shared_ptr<const profiles::TrapezoidalTrajectory>> keep_alive_;
   bool start_pending_{false};
   rclcpp::Time t_start_;
 

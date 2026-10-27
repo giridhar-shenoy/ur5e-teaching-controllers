@@ -154,6 +154,30 @@ TEST_F(PinocchioModelTest, PayloadComOffsetChangesWristTorque)
   EXPECT_GT((ga - gb).norm(), 0.05);
 }
 
+TEST(PinocchioModelPayload, OffsetComOnARotatedTipFrameIsTransformedIntoTheJointFrame)
+{
+  // tool0 coincides with the wrist_3 joint frame, so the tests above cannot tell whether the
+  // payload is moved from the tip frame into the joint frame. ft_frame is rotated by pi about x
+  // relative to wrist_3_link: with a CoM offset c, the weight acts at p_tip + R_tip c, and
+  // dg = J_c^T [0, 0, m g] with J_c = J_lin - [R_tip c]x J_ang (world-aligned).
+  PinocchioModel model(read_urdf(), kJoints, "ft_frame");
+  const Eigen::VectorXd q = stretched();
+  const Eigen::VectorXd g0 = model.gravity(q);
+  const double m = 1.5;
+  const Eigen::Vector3d c(0.02, -0.03, 0.06);
+  model.set_payload(m, c);
+  const Eigen::VectorXd dg = model.gravity(q) - g0;
+
+  const Eigen::MatrixXd J = model.tip_jacobian(q);
+  const Eigen::Vector3d r = model.tip_rotation(q) * c;
+  Eigen::Matrix3d r_cross;
+  r_cross << 0, -r.z(), r.y(), r.z(), 0, -r.x(), -r.y(), r.x(), 0;
+  const Eigen::MatrixXd J_c = J.topRows<3>() - r_cross * J.bottomRows<3>();
+  const Eigen::VectorXd expected = J_c.transpose() * Eigen::Vector3d(0.0, 0.0, m * 9.81);
+  EXPECT_TRUE(dg.isApprox(expected, 1e-6))
+    << "dg = " << dg.transpose() << "\nexpected = " << expected.transpose();
+}
+
 TEST(PinocchioModelErrors, UnknownJointOrFrameOrDofMismatchThrows)
 {
   const std::string urdf = read_urdf();

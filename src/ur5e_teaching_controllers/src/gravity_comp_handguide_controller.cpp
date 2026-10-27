@@ -37,19 +37,32 @@ CallbackReturn GravityCompHandGuidingController::on_init()
   return CallbackReturn::SUCCESS;
 }
 
+namespace
+{
+// One entry per joint; checked on configure and again for every runtime parameter change.
+bool per_joint_sizes_ok(const gravity_comp_handguide_controller::Params & p)
+{
+  const std::size_t n = p.joints.size();
+  for (const auto * v :
+       {&p.damping, &p.friction_viscous, &p.friction_coulomb, &p.max_joint_velocity}) {
+    if (v->size() != n) {
+      return false;
+    }
+  }
+  return true;
+}
+}  // namespace
+
 CallbackReturn GravityCompHandGuidingController::on_configure(const rclcpp_lifecycle::State &)
 {
   *params_ = param_listener_->get_params();
   const std::size_t n = params_->joints.size();
-  for (const auto * v :
-       {&params_->damping, &params_->friction_viscous, &params_->friction_coulomb,
-        &params_->max_joint_velocity}) {
-    if (v->size() != n) {
-      RCLCPP_ERROR(
-        get_node()->get_logger(), "every per-joint parameter needs %zu entries (one per joint)", n);
-      return CallbackReturn::ERROR;
-    }
+  if (!per_joint_sizes_ok(*params_)) {
+    RCLCPP_ERROR(
+      get_node()->get_logger(), "every per-joint parameter needs %zu entries (one per joint)", n);
+    return CallbackReturn::ERROR;
   }
+  staged_ = std::make_unique<gravity_comp_handguide_controller::Params>(*params_);
   if (!configure_common(params_->joints, params_->tip_frame, params_->state_publish_decimation)) {
     return CallbackReturn::ERROR;
   }
@@ -87,9 +100,16 @@ CallbackReturn GravityCompHandGuidingController::on_deactivate(const rclcpp_life
 return_type GravityCompHandGuidingController::update(
   const rclcpp::Time & time, const rclcpp::Duration &)
 {
-  if (param_listener_->is_old(*params_)) {
-    *params_ = param_listener_->get_params();
-    apply_params();  // runtime payload change -> payload body inertia in the Pinocchio model
+  // Non-blocking: skips this cycle if a parameter change is being written right now.
+  if (param_listener_->try_update_params(*staged_)) {
+    if (per_joint_sizes_ok(*staged_)) {
+      *params_ = *staged_;  // same-size vectors: copy-assignment does not allocate
+      apply_params();       // runtime payload change -> payload body inertia in the model
+    } else {
+      RCLCPP_ERROR(
+        get_node()->get_logger(), "parameter change rejected: per-joint array size != %zu",
+        joints_.size());
+    }
   }
   read_state();
 

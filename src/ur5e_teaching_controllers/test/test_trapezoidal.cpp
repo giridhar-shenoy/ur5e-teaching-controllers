@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "profiles/trapezoidal.hpp"
@@ -144,4 +145,18 @@ TEST(Trapezoidal, InvalidInputsThrow)
     std::invalid_argument);
   EXPECT_THROW(
     TrapezoidalTrajectory({0.0}, {{1.0}, {2.0}}, {2.0, 1.0}, {1.0}, {1.0}), std::invalid_argument);
+}
+
+TEST(Trapezoidal, NonFiniteInputsAreRejected)
+{
+  // std::max(T, NaN) would silently keep T, so NaN must be caught explicitly.
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  EXPECT_THROW(TrapezoidalTrajectory({0.0}, {{nan}}, {1.0}, {1.0}, {1.0}), std::invalid_argument);
+  EXPECT_THROW(TrapezoidalTrajectory({0.0}, {{inf}}, {1.0}, {1.0}, {1.0}), std::invalid_argument);
+  EXPECT_THROW(TrapezoidalTrajectory({nan}, {{1.0}}, {1.0}, {1.0}, {1.0}), std::invalid_argument);
+  EXPECT_THROW(TrapezoidalTrajectory({0.0}, {{1.0}}, {nan}, {1.0}, {1.0}), std::invalid_argument);
+  const TrapezoidalTrajectory ok({0.25}, {{1.0}}, {1.0}, {1.0}, {1.0});
+  ASSERT_EQ(ok.start().size(), 1u);
+  EXPECT_DOUBLE_EQ(ok.start()[0], 0.25);
 }

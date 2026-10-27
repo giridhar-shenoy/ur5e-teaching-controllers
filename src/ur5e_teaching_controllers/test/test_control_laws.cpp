@@ -84,3 +84,26 @@ TEST(Pid, NoWindupWhileSaturated)
   const double u = pid.update(-1.0, 0.0, 0.002, 0.0, 20.0);
   EXPECT_LT(u, 20.0);
 }
+
+TEST(Pid, FeedforwardUsingTheHeadroomFreezesTheIntegral)
+{
+  // P alone (1 N m) is far from the 20 N m limit, but the feedforward (19.5 N m) eats the
+  // headroom: the integrator must stop as soon as the total saturates, not when P does.
+  Pid pid{1.0, 100.0, 0.0, 0.0, 0.0};
+  for (int k = 0; k < 5000; ++k) {
+    EXPECT_LE(pid.update(1.0, 0.0, 0.002, 19.5, 20.0), 20.0);
+  }
+  EXPECT_LT(pid.ki * pid.integral, 1.0);  // would be ~1000 N m if it had kept integrating
+  // When the error reverses the command leaves saturation immediately.
+  EXPECT_LT(pid.update(-0.5, 0.0, 0.002, 19.5, 20.0), 20.0);
+}
+
+TEST(Pid, KeepsIntegratingWhileSaturatedIfTheErrorWouldUnwindIt)
+{
+  // Saturated high by a large feedforward, but the error is negative: integrating reduces the
+  // command, so conditional integration must allow it.
+  Pid pid{1.0, 10.0, 0.0, 0.0, 0.0};
+  const double before = pid.integral;
+  pid.update(-1.0, 0.0, 0.002, 50.0, 20.0);
+  EXPECT_LT(pid.integral, before);
+}

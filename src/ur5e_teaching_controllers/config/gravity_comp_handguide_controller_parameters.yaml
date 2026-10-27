@@ -20,7 +20,7 @@ gravity_comp_handguide_controller:
       gt_eq<>: [0.0]
   payload_com:
     type: double_array
-    default_value: [0.0, 0.0, 0.05]
+    default_value: [0.0, 0.0, 0.03]
     description: "Model payload centre of mass in tip_frame [m]; can be changed at runtime."
     validation:
       fixed_size<>: [3]
