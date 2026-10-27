@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<!--
+  UR5e for the teaching controllers.
+
+  - ur_description's ur_robot macro (kinematics and inertias from ur_description, nothing copied).
+  - gz_ros2_control with position, velocity AND effort command interfaces on every joint, so
+    different controllers can claim different interfaces (one claimant per interface at a time).
+  - Gazebo force_torque sensor on wrist_3_joint, exposed to ros2_control as a <sensor> with six
+    state interfaces (gz_ros2_control maps gz ForceTorque sensors to state interfaces).
+  - Payload: a Gazebo-only link (inside a <gazebo> block) fixed to wrist_3_link with its centre of mass on the tool0 z axis. URDF consumers
+    (robot_state_publisher, Pinocchio inside the controllers) do not see it, exactly like a real
+    controller does not know the payload until you configure it. The controllers carry their own
+    model payload as runtime parameters; the benchmarks vary the two independently.
+-->
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur">
+  <xacro:arg name="name" default="ur"/>
+  <xacro:arg name="ur_type" default="ur5e"/>
+  <xacro:arg name="tf_prefix" default=""/>
+  <xacro:arg name="simulation_controllers" default=""/>
+  <!-- Actual payload in the simulator: mass [kg] and centre-of-mass offset along tool0 z [m]. -->
+  <xacro:arg name="payload_mass" default="0.0"/>
+  <xacro:arg name="payload_com_z" default="0.05"/>
+  <!-- Present for compatibility with ur_sim_control.launch.py's xacro call; unused here. -->
+  <xacro:arg name="safety_limits" default="false"/>
+  <xacro:arg name="safety_pos_margin" default="0.15"/>
+  <xacro:arg name="safety_k_position" default="20"/>
+
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="$(find ur_description)/urdf/inc/ur_joint_control.xacro"/>
+
+  <xacro:property name="ur_type" value="$(arg ur_type)"/>
+  <xacro:property name="prefix" value="$(arg tf_prefix)"/>
+  <xacro:property name="payload_mass" value="$(arg payload_mass)"/>
+  <xacro:property name="payload_com_z" value="$(arg payload_com_z)"/>
+  <!-- Payload is modelled as a solid 6 cm cube (same inertia formula as the controllers use). -->
+  <xacro:property name="payload_side" value="0.06"/>
+  <xacro:property name="payload_i" value="${payload_mass * payload_side * payload_side / 6.0}"/>
+
+  <link name="world"/>
+
+  <xacro:ur_robot
+    name="$(arg name)"
+    tf_prefix="${prefix}"
+    parent="world"
+    joint_limits_parameters_file="$(find ur_description)/config/${ur_type}/joint_limits.yaml"
+    kinematics_parameters_file="$(find ur_description)/config/${ur_type}/default_kinematics.yaml"
+    physical_parameters_file="$(find ur_description)/config/${ur_type}/physical_parameters.yaml"
+    visual_parameters_file="$(find ur_description)/config/${ur_type}/visual_parameters.yaml"
+    force_abs_paths="true">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:ur_robot>
+
+  <!-- ros2_control: the simulated hardware interface -->
+  <ros2_control name="$(arg name)" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <!-- home: tool pointing down, elbow up; away from the shoulder, elbow and wrist singularities -->
+    <xacro:ur_joint_control_description
+      tf_prefix="${prefix}"
+      initial_positions="${dict(shoulder_pan_joint=0.0, shoulder_lift_joint=-1.57, elbow_joint=1.57, wrist_1_joint=-1.57, wrist_2_joint=-1.57, wrist_3_joint=0.0)}"/>
+    <sensor name="${prefix}tcp_fts_sensor">
+      <state_interface name="force.x"/>
+      <state_interface name="force.y"/>
+      <state_interface name="force.z"/>
+      <state_interface name="torque.x"/>
+      <state_interface name="torque.y"/>
+      <state_interface name="torque.z"/>
+    </sensor>
+  </ros2_control>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(arg simulation_controllers)</parameters>
+    </plugin>
+  </gazebo>
+
+  <!-- Wrist force/torque sensor (needs gz::sim::systems::ForceTorque in the world). -->
+  <gazebo reference="${prefix}wrist_3_joint">
+    <sensor name="${prefix}tcp_fts_sensor" type="force_torque">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <force_torque>
+        <frame>child</frame>
+        <measure_direction>child_to_parent</measure_direction>
+      </force_torque>
+    </sensor>
+  </gazebo>
+
+  <!-- Actual payload, simulator only. Skipped entirely at 0 kg (Gazebo rejects massless links). -->
+  <xacro:if value="${payload_mass > 0.0}">
+    <gazebo>
+      <link name="payload">
+        <pose relative_to="${prefix}tool0">0 0 ${payload_com_z} 0 0 0</pose>
+        <inertial>
+          <mass>${payload_mass}</mass>
+          <inertia>
+            <ixx>${payload_i}</ixx><iyy>${payload_i}</iyy><izz>${payload_i}</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="payload_visual">
+          <geometry><box><size>${payload_side} ${payload_side} ${payload_side}</size></box></geometry>
+          <material>
+            <ambient>0.9 0.5 0.1 1</ambient>
+            <diffuse>0.9 0.5 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <joint name="payload_joint" type="fixed">
+        <parent>${prefix}wrist_3_link</parent>
+        <child>payload</child>
+      </joint>
+    </gazebo>
+  </xacro:if>
+</robot>

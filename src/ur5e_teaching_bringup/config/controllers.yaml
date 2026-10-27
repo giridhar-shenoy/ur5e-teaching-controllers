@@ -1,0 +1,58 @@
+# ros2_control configuration for the UR5e teaching sim.
+# sim.launch.py adds `params_file: <this file>` to every controller entry at launch time, because
+# ros2_control 6.10.1 only passes parameters to a controller node through that key (see NOTES.md).
+#
+# Interface ownership (only one active controller may claim a command interface):
+#   joint_trajectory_controller         -> <joint>/position   (stock, used for bringup and homing)
+#   pid_ff_trajectory_controller        -> <joint>/effort     (mode: track)
+#   gravity_comp_handguide_controller   -> <joint>/effort     (mode: handguide)
+controller_manager:
+  ros__parameters:
+    update_rate: 500  # Hz; gz_ros2_control runs at this rate on a 1 ms physics step
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    force_torque_sensor_broadcaster:
+      type: force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster
+
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    pid_ff_trajectory_controller:
+      type: ur5e_teaching_controllers/PidFfTrajectoryController
+
+    gravity_comp_handguide_controller:
+      type: ur5e_teaching_controllers/GravityCompHandGuidingController
+
+force_torque_sensor_broadcaster:
+  ros__parameters:
+    sensor_name: tcp_fts_sensor
+    frame_id: wrist_3_link
+
+joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.2
+      goal_time: 0.0
+      shoulder_pan_joint: {trajectory: 0.2, goal: 0.1}
+      shoulder_lift_joint: {trajectory: 0.2, goal: 0.1}
+      elbow_joint: {trajectory: 0.2, goal: 0.1}
+      wrist_1_joint: {trajectory: 0.2, goal: 0.1}
+      wrist_2_joint: {trajectory: 0.2, goal: 0.1}
+      wrist_3_joint: {trajectory: 0.2, goal: 0.1}
