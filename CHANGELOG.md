@@ -8,4 +8,33 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Repository skeleton: license, CI, devcontainer, pre-commit, docs and scripts placeholders.
+- Repository skeleton: MIT license, Lyrical Dockerfile and devcontainer, GitHub Actions CI that
+  builds the image in the job and runs build, lint, tests, a results-consistency check and a
+  headless Gazebo smoke test; pre-commit with ruff, clang-format (ROS 2 style), yamllint and
+  markdownlint.
+- `ur5e_teaching_bringup`: UR5e xacro overlay (position/velocity/effort command interfaces,
+  wrist force/torque sensor as a ros2_control sensor, Gazebo-only payload link with xacro
+  `payload_mass`), `bench.sdf` (DART, 1 ms, ForceTorque, ApplyLinkWrench), `bench_camera.sdf`,
+  `sim.launch.py` (headless by default, `mode:=track|handguide`), `mode.launch.py`, controller
+  configuration at 500 Hz.
+- `ur5e_teaching_controllers` (C++17 ros2_control plugins, Pinocchio dynamics from the URDF):
+  - `PidFfTrajectoryController`: effort; trapezoidal re-profiling under per-joint velocity and
+    acceleration limits; PID with conditional-integration anti-windup; URDF torque limits;
+    RNEA feedforward on the desired state, switchable at runtime.
+  - `GravityCompHandGuidingController`: effort; g(q) + optional Coriolis, viscous damping,
+    friction hook, runtime payload mass/CoM, joint-limit repulsion, speed cap that deactivates
+    the controller with an error.
+  - `PinocchioModel` wrapper and 34 gtest cases (profiles, limits, PID, rigid-body identities on
+    the UR5e URDF, controller_manager integration on mock hardware).
+- `ur5e_teaching_bench` (Python): strict conflict-aware `mode_manager`, `bench_tracking`,
+  `bench_handguide`, `record_mode`.
+- Scripts: `ci_smoke.sh`, `bench_tracking.sh`, `bench_handguide.sh`, `record_gifs.sh`,
+  `make_results.py`, `regenerate_all.sh`, `build.sh`.
+- Docs: README, `docs/results.md` (generated), `docs/architecture.md`, `docs/controllers.md`,
+  `docs/what_broke.md` (draft).
+
+### Fixed
+
+- Work around two failures of the stock `ur_sim_control.launch.py` on Lyrical (no controller
+  parameters reach the controllers; duplicate robot spawn when Gazebo boots slowly) in
+  `sim.launch.py`.
