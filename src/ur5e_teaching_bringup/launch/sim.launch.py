@@ -197,7 +197,7 @@ def generate_launch_description():
         DeclareLaunchArgument("description_file", default_value=""),
         DeclareLaunchArgument("controllers_file", default_value=""),
         DeclareLaunchArgument("payload_mass", default_value="0.0"),
-        DeclareLaunchArgument("payload_com_z", default_value="0.05"),
+        DeclareLaunchArgument("payload_com_z", default_value="0.03"),
         DeclareLaunchArgument(
             "initial_joint_controller", default_value="joint_trajectory_controller"
         ),

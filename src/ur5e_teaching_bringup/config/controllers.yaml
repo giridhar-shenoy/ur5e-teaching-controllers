@@ -24,6 +24,10 @@ controller_manager:
 
     gravity_comp_handguide_controller:
       type: ur5e_teaching_controllers/GravityCompHandGuidingController
+      # If hand guiding trips its speed cap (update() returns ERROR), the controller_manager
+      # activates the tracking controller, which holds the joints where they are instead of
+      # leaving them limp. The fallback must be loaded and configured (mode_manager does that).
+      fallback_controllers: [pid_ff_trajectory_controller]
 
 force_torque_sensor_broadcaster:
   ros__parameters:
@@ -79,7 +83,7 @@ pid_ff_trajectory_controller:
     max_acceleration: [4.0, 4.0, 4.0, 6.0, 6.0, 6.0]
     feedforward: true
     payload_mass: 0.0
-    payload_com: [0.0, 0.0, 0.05]
+    payload_com: [0.0, 0.0, 0.03]
     state_publish_decimation: 1
 
 gravity_comp_handguide_controller:
@@ -93,7 +97,7 @@ gravity_comp_handguide_controller:
       - wrist_3_joint
     tip_frame: tool0
     payload_mass: 0.0
-    payload_com: [0.0, 0.0, 0.05]
+    payload_com: [0.0, 0.0, 0.03]
     coriolis_compensation: true
     damping: [8.0, 8.0, 5.0, 2.0, 1.0, 0.05]
     limit_margin: 0.2
