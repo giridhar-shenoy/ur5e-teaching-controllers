@@ -19,3 +19,27 @@
   Meanwhile I run the same steps natively on the laptop (pre-commit, rosdep check, colcon build,
   colcon test, ci_smoke.sh) and paste their outputs in CHECKPOINTS.md. The Docker image build
   itself cannot be verified locally (Docker is not installed).
+
+### 2. Git author e-mail on every commit is the old work address
+
+- **What**: the machine's global git config is `Giridhar J Shenoy <the old work e-mail>`, so
+  every commit in this repo carries that address. The repo is private for now.
+- **Why it needs you**: identity and history are yours to decide; changing it afterwards means
+  rewriting history, which I must not do.
+- **Recommendation**: if you want your personal address on public portfolio repos, set
+  `git config user.email` in this repo before the next commits; whether to rewrite the existing
+  ones before going public is your call (it is a force-push).
+- **Blocks**: nothing technically.
+
+### 3. Facts in the README / what_broke.md only you can confirm
+
+- **README "What transfers to a real UR"** says the stock `ur_robot_driver` path is position /
+  velocity, not joint torque, as your brief states. Newer PolyScope releases may offer some
+  direct-torque mode; please confirm the sentence matches what you want to claim.
+- **Blocks**: publishing (not the code).
+
+### 4. Branch protection and visibility
+
+- Not enabled / not changed (not approved for tonight). Recommendation: once CI runs, protect
+  `main` with the `build-test` check required, then make the repo public when you are happy
+  with the README.
