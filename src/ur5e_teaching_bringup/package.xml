@@ -22,6 +22,7 @@
   <exec_depend>ros2controlcli</exec_depend>
   <exec_depend>ur_description</exec_depend>
   <exec_depend>ur_simulation_gz</exec_depend>
+  <exec_depend>ur5e_teaching_bench</exec_depend>
   <exec_depend>ur5e_teaching_controllers</exec_depend>
   <exec_depend>xacro</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
