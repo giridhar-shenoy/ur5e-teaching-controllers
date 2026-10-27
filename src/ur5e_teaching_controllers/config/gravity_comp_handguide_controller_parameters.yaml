@@ -1,0 +1,68 @@
+gravity_comp_handguide_controller:
+  joints:
+    type: string_array
+    default_value: []
+    description: "Joints in command order; must be all DoFs of the robot_description."
+    read_only: true
+    validation:
+      not_empty<>: null
+      unique<>: null
+  tip_frame:
+    type: string
+    default_value: "tool0"
+    description: "Frame the model payload is attached to."
+    read_only: true
+  payload_mass:
+    type: double
+    default_value: 0.0
+    description: "Model payload mass [kg]; can be changed while the controller runs."
+    validation:
+      gt_eq<>: [0.0]
+  payload_com:
+    type: double_array
+    default_value: [0.0, 0.0, 0.05]
+    description: "Model payload centre of mass in tip_frame [m]; can be changed at runtime."
+    validation:
+      fixed_size<>: [3]
+  coriolis_compensation:
+    type: bool
+    default_value: false
+    description: "Also compensate C(q, qd) qd (uses Pinocchio nonLinearEffects)."
+  damping:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Viscous damping per joint, tau -= D qd [N m s / rad]."
+    validation:
+      lower_element_bounds<>: [0.0]
+  friction_viscous:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Friction model hook: compensated viscous friction [N m s / rad] (0 in Gazebo)."
+  friction_coulomb:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Friction model hook: compensated Coulomb friction [N m] (0 in Gazebo)."
+  limit_margin:
+    type: double
+    default_value: 0.2
+    description: "Joint-limit repulsion starts this far from a URDF position limit [rad]."
+    validation:
+      gt_eq<>: [0.0]
+  limit_stiffness:
+    type: double
+    default_value: 50.0
+    description: "Joint-limit repulsion stiffness [N m / rad]."
+    validation:
+      gt_eq<>: [0.0]
+  max_joint_velocity:
+    type: double_array
+    default_value: [1.5, 1.5, 1.5, 2.0, 2.0, 2.0]
+    description: "Speed cap per joint [rad/s]; exceeding it deactivates the controller with an error."
+    validation:
+      lower_element_bounds<>: [0.0]
+  state_publish_decimation:
+    type: int
+    default_value: 1
+    description: "Publish ~/controller_state every N updates."
+    validation:
+      gt_eq<>: [1]
