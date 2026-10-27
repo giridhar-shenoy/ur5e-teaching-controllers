@@ -1,0 +1,12 @@
+<library path="ur5e_teaching_controllers">
+  <class name="ur5e_teaching_controllers/PidFfTrajectoryController"
+         type="ur5e_teaching_controllers::PidFfTrajectoryController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Joint trajectory tracking on effort: PID with anti-windup plus Pinocchio RNEA feedforward, trapezoidal re-profiling.</description>
+  </class>
+  <class name="ur5e_teaching_controllers/GravityCompHandGuidingController"
+         type="ur5e_teaching_controllers::GravityCompHandGuidingController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Gravity-compensated hand guiding on effort with runtime payload, viscous damping, joint-limit repulsion and a speed cap.</description>
+  </class>
+</library>

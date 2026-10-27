@@ -1,0 +1,78 @@
+pid_ff_trajectory_controller:
+  joints:
+    type: string_array
+    default_value: []
+    description: "Joints in command order; must be all DoFs of the robot_description."
+    read_only: true
+    validation:
+      not_empty<>: null
+      unique<>: null
+  tip_frame:
+    type: string
+    default_value: "tool0"
+    description: "Frame the model payload is attached to."
+    read_only: true
+  kp:
+    type: double_array
+    default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    description: "Proportional gain per joint [N m / rad]."
+    validation:
+      lower_element_bounds<>: [0.0]
+  ki:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Integral gain per joint [N m / (rad s)]."
+    validation:
+      lower_element_bounds<>: [0.0]
+  kd:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Derivative gain per joint [N m s / rad]."
+    validation:
+      lower_element_bounds<>: [0.0]
+  i_clamp:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Anti-windup: bound on |ki * integral| per joint [N m]; 0 = unbounded."
+    validation:
+      lower_element_bounds<>: [0.0]
+  max_velocity:
+    type: double_array
+    default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    description: "Trapezoidal profile velocity limit per joint [rad/s]."
+    validation:
+      lower_element_bounds<>: [0.001]
+  max_acceleration:
+    type: double_array
+    default_value: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+    description: "Trapezoidal profile acceleration limit per joint [rad/s^2]."
+    validation:
+      lower_element_bounds<>: [0.001]
+  feedforward:
+    type: bool
+    default_value: true
+    description: "Add tau_ff = RNEA(q_des, qd_des, qdd_des) from Pinocchio."
+  payload_mass:
+    type: double
+    default_value: 0.0
+    description: "Model payload mass [kg] used by the feedforward."
+    validation:
+      gt_eq<>: [0.0]
+  payload_com:
+    type: double_array
+    default_value: [0.0, 0.0, 0.05]
+    description: "Model payload centre of mass in tip_frame [m]."
+    validation:
+      fixed_size<>: [3]
+  effort_limit_scale:
+    type: double
+    default_value: 1.0
+    description: "Torque saturation = scale * URDF effort limit."
+    validation:
+      bounds<>: [0.0, 1.0]
+  state_publish_decimation:
+    type: int
+    default_value: 1
+    description: "Publish ~/controller_state every N updates."
+    validation:
+      gt_eq<>: [1]

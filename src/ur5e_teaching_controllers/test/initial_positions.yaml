@@ -1,0 +1,8 @@
+# Mock-hardware start pose for test_load_controllers: the sim's home pose (elbow up, tool down),
+# where gravity loads the shoulder and elbow, so "output == g(q)" is a meaningful check.
+shoulder_pan_joint: 0.0
+shoulder_lift_joint: -1.57
+elbow_joint: 1.57
+wrist_1_joint: -1.57
+wrist_2_joint: -1.57
+wrist_3_joint: 0.0
