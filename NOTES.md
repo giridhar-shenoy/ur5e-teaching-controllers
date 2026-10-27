@@ -118,3 +118,15 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
   lock was released. R2's queued benchmark then started its own Gazebo; both ran together for
   ~1 min until I killed my session (`pkill -s <sid>`). Fixed: stop now signals timeout's group,
   waits for it, and only then lets flock exit. Checked with `ps -eo pid,pgid,sid,args`.
+- 04:25 FINDING (gz_ros2_control 3.0.9): switching a joint from the effort interface back to the
+  position interface (pid_ff_trajectory_controller -> joint_trajectory_controller) leaves it
+  uncommanded: /joint_states effort drops to 0 and the arm falls onto the ground within 1 s
+  (`mode_manager mode:=position`, then /joint_states: q [0.381 -0.535 2.628 -3.66 -3.126 -0.235],
+  effort all 0). position -> effort works. Root cause not verified (no source in the binary
+  package). Workaround: never go back to position; homing uses the effort tracking controller;
+  `position` mode removed from mode_manager. Listed under "Where it fails".
+- 04:20 bench_tracking first validation: FF-on run after an FF-off run gave 1.1 rad RMSE —
+  traced (raw dump) to the effort->position homing above, not to the controller. FF-on alone:
+  max RMSE 0.13 mrad, max |e| 1.9 mrad at 2x speed.
+- 04:30–04:45 R2 holds the Gazebo lock (bench_planners.sh, timeout 3600 s); wrote docs, results
+  tooling and GIF pipeline meanwhile. sim_session.sh now waits for the lock without a deadline.

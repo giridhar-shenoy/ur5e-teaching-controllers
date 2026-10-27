@@ -113,3 +113,107 @@ GIFs, README/docs, CI green (blocked on billing).
 ### Does 1 Nov hold?
 
 Yes for everything except "CI green", which depends on the billing fix (WAITING FOR GIRI #1).
+
+## CHECKPOINT 2 — controllers (a) + (b) load, switch and move the arm headless (2026-10-28 04:50 IST)
+
+Wall-clock spent so far: 1 h 25 min. Evidence below is from runs at 04:00–04:30 in this session
+(commits `1aa8ff0` controllers, `975ac5b` mode manager / drivers).
+
+### git status
+
+```text
+$ git status --short
+ M NOTES.md
+?? results/            (tracking benchmark writing results/tracking.csv right now)
+```
+
+### Unit and integration tests (colcon test)
+
+```text
+$ colcon test && colcon test-result
+Summary: 38 tests, 0 errors, 0 failures, 0 skipped
+test_trapezoidal: tests="10" failures="0"
+test_control_laws: tests="9" failures="0"
+test_pinocchio_model: tests="11" failures="0"
+test_load_controllers: tests="4" failures="0"     # 25/25 repeated runs pass
+```
+
+34 gtest cases (≥ 12 required): profiles (10), limits + PID anti-windup (9), Pinocchio wrapper
+(11), controller_manager + mock hardware (4: load/configure both plugins, hand-guiding output ==
+Pinocchio g(q) on mock_components/GenericSystem, tracking controller activates and holds, the two
+effort controllers conflict and a strict hand-over succeeds). The other 4 of the 38 are
+ament/pytest wrappers.
+
+Bug found and fixed on the way: `test_load_controllers` segfaulted in ~50 % of runs. gdb showed
+the crash in the test's own subscription lambda (captured locals used after the test body
+returned while the executor thread still delivered messages) — a harness bug, not controller
+code. Fixed by stopping the executor before reading/destroying the captures.
+
+### F/T sensor reaches ros2_control (no ros_gz_bridge fallback needed)
+
+```text
+$ ros2 control list_hardware_interfaces | grep tcp_fts
+	tcp_fts_sensor/force.x
+	tcp_fts_sensor/force.y
+	... (force.z, torque.x/y/z)
+$ ros2 topic echo --once /force_torque_sensor_broadcaster/wrench
+header: {stamp: {sec: 13, nanosec: 327000000}, frame_id: wrist_3_link}
+wrench: {force: {x: 0.00285, y: -0.00285, ...}}
+```
+
+### Mode switching (mode.launch.py, strict)
+
+```text
+$ ros2 launch ur5e_teaching_bringup mode.launch.py mode:=track
+[mode_manager]: mode 'track': activated pid_ff_trajectory_controller, deactivated ['joint_trajectory_controller']; active now: ['force_torque_sensor_broadcaster', 'joint_state_broadcaster', 'pid_ff_trajectory_controller']
+$ ros2 run ur5e_teaching_bench mode_manager --ros-args -p mode:=handguide
+[mode_manager]: mode 'handguide': activated gravity_comp_handguide_controller, deactivated ['pid_ff_trajectory_controller']; active now: ['force_torque_sensor_broadcaster', 'gravity_comp_handguide_controller', 'joint_state_broadcaster']
+```
+
+### (a) tracking controller moves the arm on the effort interface
+
+```text
+# FF switched off at runtime -> the arm sags until the integrator carries gravity (proves the
+# torques are really applied):
+$ ros2 param set /pid_ff_trajectory_controller feedforward false; probe 3 s
+1501 msgs over sim 3.00s (rate 500 Hz)
+max|err| [0.     0.0045 0.0111 0.0157 0.     0.    ]
+# FF on, 2-waypoint trajectory (0.5 rad moves, 2 s per segment):
+2442 msgs over sim 4.89s (rate 499 Hz)
+max|err| [0.0004 0.0003 0.0004 0.0008 0.0003 0.0004]
+max|qd|  [0.3755 0.2782 0.2779 0.2792 0.2797 0.3755]
+```
+
+### (b) hand guiding floats the arm and the speed cap works
+
+```text
+# model payload = actual (0 kg), no push, 3 s:
+max|qd| [0.0002 0.0026 0.0041 0.0037 0.0001 0.    ]
+# 20 N persistent push on wrist_3_link (ApplyLinkWrench via ros_gz_bridge):
+[gravity_comp_handguide_controller]: speed cap: |qd| of wrist_1_joint is 2.042 rad/s > 2.000 rad/s; deactivating
+[controller_manager]: Deactivating controllers : [ gravity_comp_handguide_controller ] as their update resulted in an error!
+```
+
+(Wrist damping was raised afterwards, `[.., 2.0, 1.0, 0.05]`, so pushes move the arm rather
+than spin the wrist.)
+
+### Finding: effort -> position switch drops the arm (gz_ros2_control 3.0.9)
+
+```text
+JTC start    q [-0.   -1.57  1.57 -1.57 -1.57 -0.  ] eff [  0.   -20.28 -20.24  -1.82   0.     0.  ]
+mode 'track': activated pid_ff_trajectory_controller
+after track  q [ 0.   -1.57  1.57 -1.57 -1.57 -0.  ] eff [  0.   -20.28 -20.24  -1.82   0.    -0.  ]
+mode 'position': activated joint_trajectory_controller
+JTC +1s      q [ 0.381 -0.535  2.628 -3.66  -3.126 -0.235] eff [ 0.  0. -0. -0. -0. -0.]
+```
+
+Workaround: no switch back to position; homing uses the effort tracking controller.
+
+### MUST list remaining
+
+Benchmarks running (tracking, then hand-guiding), results tables and figures, GIFs, final
+README numbers, CHANGELOG, checkpoint 3/4, CI green (blocked on billing).
+
+### Does 1 Nov hold?
+
+Yes, except "CI green", which needs the billing fix.
