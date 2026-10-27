@@ -25,6 +25,7 @@ DOCS = ROOT / "docs"
 ASSETS = DOCS / "assets"
 README = ROOT / "README.md"
 BEGIN, END = "<!-- results:begin -->", "<!-- results:end -->"
+HEAD_BEGIN, HEAD_END = "<!-- headline:begin -->", "<!-- headline:end -->"
 
 # Reference palette (dataviz skill, validated light/dark): slot 1 blue, slot 2 orange.
 THEMES = {
@@ -364,15 +365,38 @@ def results_markdown(track_rows, hg_rows) -> tuple[str, str]:
     return full, summary
 
 
-def sync_readme(summary: str, check: bool) -> bool:
+def headline(track_rows, hg_rows) -> str:
+    """The README's third sentence: one tracking number and one hand-guiding number."""
+    worst_rmse, _, _ = tracking(track_rows)
+    by = handguide(hg_rows)
+    speed = 1.0 if (1.0, 1) in worst_rmse else sorted(worst_rmse)[0][0]
+    over = [(m, a) for (m, a) in by if a - m > 0]
+    model, actual = max(over, key=lambda k: k[1] - k[0]) if over else next(iter(by))
+    rs = by[(model, actual)]
+    return (
+        f"At {speed:g}× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE "
+        f"to {pm(worst_rmse[(speed, 1)], 1e3)} mrad (PID alone: "
+        f"{pm(worst_rmse[(speed, 0)], 1e3)} mrad), and in hand guiding a {actual - model:g} kg "
+        f"payload-model error costs the operator {pm([r['hold_force_z_n'] for r in rs])} N "
+        f"of vertical force to hold the arm still "
+        f"(Δm·g = {float(rs[0]['expected_hold_force_z_n']):.2f} N)."
+    )
+
+
+def replace_block(text: str, begin: str, end: str, body: str) -> str:
+    if begin not in text or end not in text:
+        return text
+    head, rest = text.split(begin, 1)
+    _, tail = rest.split(end, 1)
+    return f"{head}{begin}\n{body}\n{end}{tail}"
+
+
+def sync_readme(summary: str, head_sentence: str, check: bool) -> bool:
     if not README.exists():
         return True
     text = README.read_text()
-    if BEGIN not in text or END not in text:
-        return True
-    head, rest = text.split(BEGIN, 1)
-    _, tail = rest.split(END, 1)
-    new = f"{head}{BEGIN}\n{summary}\n{END}{tail}"
+    new = replace_block(text, BEGIN, END, summary)
+    new = replace_block(new, HEAD_BEGIN, HEAD_END, head_sentence)
     if check:
         return new == text
     README.write_text(new)
@@ -388,13 +412,14 @@ def main(argv=None) -> int:
     track_rows = read_csv(RESULTS / "tracking.csv")
     hg_rows = read_csv(RESULTS / "handguide.csv")
     full, summary = results_markdown(track_rows, hg_rows)
+    head_sentence = headline(track_rows, hg_rows)
     out = DOCS / "results.md"
     if args.check:
-        ok = out.read_text() == full + "\n" and sync_readme(summary, check=True)
+        ok = out.read_text() == full + "\n" and sync_readme(summary, head_sentence, check=True)
         print("results up to date" if ok else "results out of date: run scripts/make_results.py")
         return 0 if ok else 1
     out.write_text(full + "\n")
-    sync_readme(summary, check=False)
+    sync_readme(summary, head_sentence, check=False)
     if not args.no_plots:
         ASSETS.mkdir(parents=True, exist_ok=True)
         worst_rmse, _, _ = tracking(track_rows)
