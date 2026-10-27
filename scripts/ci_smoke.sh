@@ -117,4 +117,24 @@ moved = max(abs(a - b) for a, b in zip(after, before, strict=True))
 print(f"[smoke] max joint displacement: {moved:.3f} rad (threshold {min_motion} rad)")
 sys.exit(0 if moved >= min_motion else 3)
 PY
+
+if [ "${TARGET}" = "teaching" ]; then
+  # Both teaching modes must switch cleanly and leave exactly the expected controller active.
+  for mode in track handguide; do
+    case "${mode}" in
+      track) expected=pid_ff_trajectory_controller ;;
+      handguide) expected=gravity_comp_handguide_controller ;;
+    esac
+    timeout "$(remaining)" ros2 launch ur5e_teaching_bringup mode.launch.py "mode:=${mode}" \
+      >"${LOG_DIR}/mode_${mode}.txt" 2>&1
+    ros2 control list_controllers >"${LOG_DIR}/controllers_${mode}.txt"
+    active=$(awk '$3 == "active" {print $1}' "${LOG_DIR}/controllers_${mode}.txt" | sort | tr '\n' ' ')
+    echo "[smoke] mode ${mode}: active = ${active}"
+    if ! grep -Eq "^${expected} .*active" "${LOG_DIR}/controllers_${mode}.txt" \
+        || grep -Eq "^joint_trajectory_controller .* active" "${LOG_DIR}/controllers_${mode}.txt"; then
+      echo "[smoke] mode ${mode} did not leave ${expected} as the only joint controller"
+      exit 4
+    fi
+  done
+fi
 echo "[smoke] PASS in $((SECONDS - start)) s"
