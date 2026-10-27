@@ -99,7 +99,10 @@ gravity_comp_handguide_controller:
     payload_mass: 0.0
     payload_com: [0.0, 0.0, 0.03]
     coriolis_compensation: true
-    damping: [8.0, 8.0, 5.0, 2.0, 1.0, 0.05]
+    # Joint damping trades push effort for drift. With [8, 8, 5, 2, 1, 0.05] a 1 kg payload-model
+    # error moved the TCP 0.5-1.0 m in 2 s (the arm reached the floor); see NOTES.md. Explicit
+    # 2 ms loop: keep D * dt / M_jj < 1 (wrist_2 ~0.56, wrist_3 ~0.33 at 0 kg payload).
+    damping: [25.0, 25.0, 15.0, 3.0, 1.5, 0.05]
     limit_margin: 0.2
     limit_stiffness: 50.0
     max_joint_velocity: [1.5, 1.5, 1.5, 2.0, 2.0, 2.0]
