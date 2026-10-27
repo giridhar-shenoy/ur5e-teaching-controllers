@@ -130,8 +130,8 @@ if [ "${TARGET}" = "teaching" ]; then
     ros2 control list_controllers >"${LOG_DIR}/controllers_${mode}.txt"
     active=$(awk '$3 == "active" {print $1}' "${LOG_DIR}/controllers_${mode}.txt" | sort | tr '\n' ' ')
     echo "[smoke] mode ${mode}: active = ${active}"
-    if ! grep -Eq "^${expected} .*active" "${LOG_DIR}/controllers_${mode}.txt" \
-        || grep -Eq "^joint_trajectory_controller .* active" "${LOG_DIR}/controllers_${mode}.txt"; then
+    if [ "$(awk -v c="${expected}" '$1 == c {print $3}' "${LOG_DIR}/controllers_${mode}.txt")" != "active" ] \
+        || [ "$(awk '$1 == "joint_trajectory_controller" {print $3}' "${LOG_DIR}/controllers_${mode}.txt")" = "active" ]; then
       echo "[smoke] mode ${mode} did not leave ${expected} as the only joint controller"
       exit 4
     fi
