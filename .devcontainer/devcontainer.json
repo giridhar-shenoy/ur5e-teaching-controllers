@@ -1,0 +1,28 @@
+{
+  "name": "ur5e-teaching-controllers (ROS 2 Lyrical)",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "dev",
+  "workspaceFolder": "/ws",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/ws,type=bind",
+  "containerEnv": {
+    "ROS_DOMAIN_ID": "11",
+    "GZ_PARTITION": "r1",
+    "MAKEFLAGS": "-j4"
+  },
+  "runArgs": ["--net=host", "--ipc=host"],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "ranch-hand-robotics.rde-pack"
+      ]
+    }
+  },
+  "postCreateCommand": "pip install --break-system-packages --user pre-commit && ~/.local/bin/pre-commit install"
+}
