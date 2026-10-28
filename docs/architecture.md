@@ -19,6 +19,7 @@ flowchart LR
       JTC["joint_trajectory_controller<br/>claims */position (homing)"]
       PID["PidFfTrajectoryController<br/>claims */effort (mode: track)"]
       HG["GravityCompHandGuidingController<br/>claims */effort (mode: handguide)"]
+      JOG["TcpJogController<br/>claims */effort (mode: jog)"]
       PIN[("DynamicsModel from robot_description<br/>Pinocchio (default) | KDL<br/>param dynamics_backend")]
     end
     PHYS --- HW
@@ -29,13 +30,14 @@ flowchart LR
   RSP["robot_state_publisher"]
   BR["ros_gz_bridge<br/>/clock, /world/bench/wrench[/persistent|/clear]"]
   MM["mode_manager (Python)<br/>strict switch_controller"]
-  BENCH["bench_tracking / bench_handguide (Python)<br/>record, analyse, CSV"]
+  BENCH["bench_tracking / bench_handguide / bench_jog (Python)<br/>record, analyse, CSV"]
   TIMING["bench_dynamics_timing (C++, standalone)<br/>no ROS graph, no Gazebo"]
   TIMING -.->|same DynamicsModel library| PIN
 
-  CM --> JSB & FTB & JTC & PID & HG
+  CM --> JSB & FTB & JTC & PID & HG & JOG
   PID --- PIN
   HG --- PIN
+  JOG --- PIN
   JSB -->|/joint_states| RSP
   FTB -->|/force_torque_sensor_broadcaster/wrench| BENCH
   MM -->|/controller_manager/switch_controller| CM
@@ -43,6 +45,8 @@ flowchart LR
   BENCH -->|~/joint_trajectory| JTC
   PID -->|~/controller_state 500 Hz| BENCH
   HG -->|~/controller_state 500 Hz| BENCH
+  BENCH -->|~/twist TwistStamped| JOG
+  JOG -->|~/jog_state 500 Hz| BENCH
   BENCH -->|EntityWrench| BR --> ALW
   GZ -->|/clock| BR
 ```
@@ -54,6 +58,7 @@ flowchart LR
 | `joint_trajectory_controller` (stock) | `<joint>/position` | position, velocity | FollowJointTrajectory action, `~/joint_trajectory` | — |
 | `pid_ff_trajectory_controller` | `<joint>/effort` | position, velocity | `~/joint_trajectory` (`trajectory_msgs/JointTrajectory`) | `~/controller_state` |
 | `gravity_comp_handguide_controller` | `<joint>/effort` | position, velocity | parameters `payload_mass`, `payload_com` (runtime) | `~/controller_state` |
+| `tcp_jog_controller` | `<joint>/effort` | position, velocity | `~/twist` (`geometry_msgs/TwistStamped`, root frame, 0.1 s deadman) | `~/controller_state`, `~/jog_state` |
 | `force_torque_sensor_broadcaster` (stock) | — | `tcp_fts_sensor/{force,torque}.{x,y,z}` | — | `~/wrench` |
 
 Only one controller may command a joint at a time. `mode_manager` enforces this with a single
