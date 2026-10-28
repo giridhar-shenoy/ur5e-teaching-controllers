@@ -167,26 +167,30 @@ if [ "${TARGET}" = "teaching" ]; then
       track)
         track_list=$(IFS=,; echo "${TRACK_GOAL[*]}")
         echo "[smoke] effort tracking: trajectory to ${track_list} in 3 s"
-        timeout "$(remaining)" ros2 topic pub --once -w 1 \
+        # --keep-alive: a one-shot publisher that exits right after publishing can lose the
+        # message before reliable delivery completes (seen once in CI on a loaded runner).
+        timeout "$(remaining)" ros2 topic pub --once -w 1 --keep-alive 2 \
           /pid_ff_trajectory_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \
           "{joint_names: [${joint_list}], points: [{positions: [${track_list}], time_from_start: {sec: 3}}]}" \
           >"${LOG_DIR}/track_pub.txt" 2>&1
-        sleep 5
+        sleep 3
         err=$(max_diff "$(read_ordered)" "${TRACK_GOAL[*]}")
         echo "[smoke] effort tracking: max |q - goal| = ${err} rad (tolerance ${TRACK_TOL_RAD})"
-        python3 -c "import sys; sys.exit(0 if ${err} <= ${TRACK_TOL_RAD} else 1)" || exit 5
+        python3 -c "import sys; sys.exit(0 if ${err} <= ${TRACK_TOL_RAD} else 1)" \
+          || { cat "${LOG_DIR}/track_pub.txt"; exit 5; }
         # Same controller, computed-torque law, back to the first goal.
         timeout "$(remaining)" ros2 param set /pid_ff_trajectory_controller control_law \
           computed_torque >"${LOG_DIR}/param_ct.txt" 2>&1 || { cat "${LOG_DIR}/param_ct.txt"; exit 5; }
         echo "[smoke] computed torque: trajectory to ${goal_list} in 3 s"
-        timeout "$(remaining)" ros2 topic pub --once -w 1 \
+        timeout "$(remaining)" ros2 topic pub --once -w 1 --keep-alive 2 \
           /pid_ff_trajectory_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \
           "{joint_names: [${joint_list}], points: [{positions: [${goal_list}], time_from_start: {sec: 3}}]}" \
           >"${LOG_DIR}/track_ct_pub.txt" 2>&1
-        sleep 5
+        sleep 3
         err=$(max_diff "$(read_ordered)" "${GOAL[*]}")
         echo "[smoke] computed torque: max |q - goal| = ${err} rad (tolerance ${TRACK_TOL_RAD})"
-        python3 -c "import sys; sys.exit(0 if ${err} <= ${TRACK_TOL_RAD} else 1)" || exit 5
+        python3 -c "import sys; sys.exit(0 if ${err} <= ${TRACK_TOL_RAD} else 1)" \
+          || { cat "${LOG_DIR}/track_ct_pub.txt"; exit 5; }
         timeout "$(remaining)" ros2 param set /pid_ff_trajectory_controller control_law pid_ff \
           >>"${LOG_DIR}/param_ct.txt" 2>&1
         ;;
