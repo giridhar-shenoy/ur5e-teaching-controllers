@@ -6,8 +6,8 @@ the controllers' *model* payload (default 1.0 kg) and, per repetition:
 1. holds the arm with the tracking controller at HOME + a seeded random offset (|.| <= 0.05 rad)
    until its integrator has converged (3 s, integral time 0.5 s): its torque is then exactly
    what the simulated arm needs to stay put, tau_hold = g_true(q);
-2. switches to gravity_comp_handguide_controller, whose first command at rest is
-   tau_hg = g_model(q), and lets go with zero applied force for 1 s;
+2. switches to gravity_comp_handguide_controller, whose model torque at rest is
+   tau_hg = g_model(q) (published as reference.effort), and lets go for 1 s;
 3. computes, with Pinocchio on the robot_description:
    - effort to hold: the tool force an operator must apply to keep the arm still,
      F = J(q)^-T (tau_hold - tau_hg). Its vertical component should be (m_actual - m_model) g.
@@ -78,7 +78,9 @@ def analyse(model: pin.Model, hold: dict, rec: dict) -> dict:
     # Effort to hold: tracking-controller steady-state torque vs hand-guiding torque at rest.
     tau_hold = np.mean(hold["effort"], axis=0)
     q_hold = np.mean(hold["position"], axis=0)
-    tau_hg = rec["effort"][0]
+    # The hand-guiding controller's model torque g_model(q) [+ C(q,qd)qd, ~0 at rest], i.e. its
+    # command without the damping term, at the first cycle after the switch.
+    tau_hg = rec["model_effort"][0]
     J = jac(q_hold)
     # J is 6x6 in controller order after to_pin/back: map the torque gap to a tool wrench.
     idx = [model.joints[model.getJointId(n)].idx_v for n in JOINTS]

@@ -63,6 +63,7 @@ class Recording:
     velocity: list = field(default_factory=list)
     error: list = field(default_factory=list)
     effort: list = field(default_factory=list)
+    model_effort: list = field(default_factory=list)  # reference.effort: the model torque
 
     def arrays(self):
         return {k: np.asarray(v, dtype=float) for k, v in self.__dict__.items()}
@@ -198,6 +199,7 @@ class BenchNode(Node):
         rec.velocity.append(msg.feedback.velocities)
         rec.error.append(msg.error.positions)
         rec.effort.append(msg.output.effort)
+        rec.model_effort.append(msg.reference.effort)
 
 
 def append_rows(path: str, rows: list[dict]) -> None:

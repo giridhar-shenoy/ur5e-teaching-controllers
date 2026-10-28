@@ -110,13 +110,6 @@ bool EffortControllerBase::write_effort()
   return ok;
 }
 
-void EffortControllerBase::write_zero_effort()
-{
-  for (auto & ci : command_interfaces_) {
-    (void)ci.set_value(0.0);
-  }
-}
-
 void EffortControllerBase::publish_state(const rclcpp::Time & time)
 {
   if (++publish_counter_ < publish_decimation_) {
