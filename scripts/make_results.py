@@ -294,11 +294,110 @@ def plot_handguide(by, theme: str, path: Path):
     plt.close(fig)
 
 
+# ---------------------------------------------------------------------------- dynamics timing
+CYCLE_US = 2000.0  # 500 Hz controller cycle
+BACKENDS = (("pinocchio", "Pinocchio"), ("kdl", "KDL"))
+FUNCTIONS = (("gravity", "g(q)"), ("rnea", "RNEA"))
+
+
+def timing(rows: list[dict]) -> dict:
+    """timing[(backend, function)] = CSV row (one row per pair, one run)."""
+    return {(r["backend"], r["function"]): r for r in rows}
+
+
+def us(row: dict, key: str) -> str:
+    # The executable times each call in whole nanoseconds, so three decimals in µs are exact.
+    return f"{float(row[key]):.3f}"
+
+
+def timing_summary_table(t: dict) -> list[str]:
+    """One row for the README: median / p95 per call and the worst p95 share of the cycle."""
+    cells = [
+        f"{us(t[(b, f)], 'median_us')} / {us(t[(b, f)], 'p95_us')}"
+        for b, _ in BACKENDS
+        for f, _ in FUNCTIONS
+    ]
+    worst = max(float(t[(b, f)]["p95_cycle_fraction"]) for b, _ in BACKENDS for f, _ in FUNCTIONS)
+    head = " | ".join(f"{bn} {fn}" for _, bn in BACKENDS for _, fn in FUNCTIONS)
+    return [
+        f"| Per call, median / p95 (µs) | {head} | Worst p95, share of the 2 ms cycle "
+        "| Regenerate with |",
+        "|---|---|---|---|---|---|---|",
+        f"| UR5e, 6 DoF, one thread | {' | '.join(cells)} | {100 * worst:.4f} % "
+        "| `scripts/bench_dynamics_timing.sh` |",
+    ]
+
+
+def timing_table(t: dict) -> list[str]:
+    lines = [
+        "| Backend | Call | Median (µs) | p95 (µs) | Mean (µs) | Max (µs) "
+        "| Median, share of 2 ms | p95, share of 2 ms |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for b, bn in (*BACKENDS, ("none", "—")):
+        for f, fn in (*FUNCTIONS, ("clock", "two clock reads only")):
+            if (b, f) not in t:
+                continue
+            r = t[(b, f)]
+            lines.append(
+                f"| {bn} | {fn} | {us(r, 'median_us')} | {us(r, 'p95_us')} "
+                f"| {float(r['mean_us']):.3f} | {float(r['max_us']):.2f} "
+                f"| {100 * float(r['median_cycle_fraction']):.4f} % "
+                f"| {100 * float(r['p95_cycle_fraction']):.4f} % |"
+            )
+    return lines
+
+
+def timing_stamp(rows: list[dict]) -> str:
+    r = rows[0]
+    return (
+        f"commit `{r['git_commit']}`, build type {r['build_type']}, CPU {r['cpu']}, "
+        f"{int(r['calls']):,} timed calls per row, seed {r['seed']}"
+    )
+
+
+def timing_section(rows: list[dict]) -> list[str]:
+    if not rows:
+        return []
+    return [
+        "## Dynamics timing — details",
+        "",
+        f"`results/dynamics_timing.csv`: {timing_stamp(rows)}.",
+        "",
+        "Method: `bench_dynamics_timing` (C++, no ROS graph, no simulator, one thread) loads",
+        "the simulation's URDF into each backend through the same `DynamicsModel` interface the",
+        "controllers use, draws the states up front (q uniform inside the URDF position limits,",
+        "q̇ inside the velocity limits, |q̈| ≤ 10 rad/s², seeded), makes 1 000 warm-up calls",
+        "and then times every call on its own with `std::chrono::steady_clock`. Times include",
+        "the wrapper's joint reordering and the timer itself (the *two clock reads only* row);",
+        "nothing is subtracted. *Share of 2 ms* is the time divided by one 500 Hz control cycle.",
+        "`scripts/bench_dynamics_timing.sh` refuses to run next to a simulator, build, pip",
+        "install or training run, and its log records the load average and the busiest",
+        "processes at start; the run here was made under the machine's heavy, build and",
+        "Gazebo locks. These are laptop numbers: CI runs the executable as a 1 000-call smoke",
+        "test only, and runner timings are not published.",
+        "",
+        *timing_table(timing(rows)),
+        "",
+    ]
+
+
 # ---------------------------------------------------------------------------- outputs
-def results_markdown(track_rows, hg_rows) -> tuple[str, str]:
+def results_markdown(track_rows, hg_rows, timing_rows=()) -> tuple[str, str]:
     """(full docs/results.md, summary block shared with the README)."""
     worst_rmse, worst_max, per_joint = tracking(track_rows)
     by = handguide(hg_rows)
+    timing_summary = (
+        [
+            "",
+            "**Cost of one dynamics call** (gravity g(q) and RNEA on each backend, single "
+            "thread; median / p95 over 100 000 timed calls):",
+            "",
+            *timing_summary_table(timing(timing_rows)),
+        ]
+        if timing_rows
+        else []
+    )
     summary = "\n".join(
         [
             "**Joint-space tracking** (PidFfTrajectoryController, 3-segment 6-joint path; worst "
@@ -310,6 +409,7 @@ def results_markdown(track_rows, hg_rows) -> tuple[str, str]:
             "payload fixed, actual Gazebo payload varied; mean ± std over repetitions):",
             "",
             *handguide_table(by),
+            *timing_summary,
         ]
     )
     reps_t = len({r["rep"] for r in track_rows})
@@ -373,6 +473,7 @@ def results_markdown(track_rows, hg_rows) -> tuple[str, str]:
             "",
             "![handguide](assets/handguide_light.png)",
             "",
+            *timing_section(list(timing_rows)),
         ]
     )
     return full, summary
@@ -425,7 +526,9 @@ def main(argv=None) -> int:
 
     track_rows = read_csv(RESULTS / "tracking.csv")
     hg_rows = read_csv(RESULTS / "handguide.csv")
-    full, summary = results_markdown(track_rows, hg_rows)
+    timing_csv = RESULTS / "dynamics_timing.csv"
+    timing_rows = read_csv(timing_csv) if timing_csv.exists() else []
+    full, summary = results_markdown(track_rows, hg_rows, timing_rows)
     full = full.rstrip("\n")  # exactly one trailing newline, as end-of-file-fixer wants
     head_sentence = headline(track_rows, hg_rows)
     out = DOCS / "results.md"
