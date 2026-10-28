@@ -75,6 +75,7 @@ class BenchNode(Node):
         super().__init__(name, parameter_overrides=[RclpyParameter("use_sim_time", value=True)])
         self.switcher = ControllerSwitcher(self)
         self._recording: Recording | None = None
+        self._recording_topic: str | None = None
         self._subs = {}
         self._pubs = {}
 
@@ -172,17 +173,23 @@ class BenchNode(Node):
         topic = f"/{controller}/controller_state"
         if topic not in self._subs:
             self._subs[topic] = self.create_subscription(
-                JointTrajectoryControllerState, topic, self._on_state, 1000
+                JointTrajectoryControllerState,
+                topic,
+                lambda msg, topic=topic: self._on_state(topic, msg),
+                1000,
             )
+        # Only this controller's messages count: during a switch the previous controller still
+        # publishes for a few cycles, and its samples must not leak into this recording.
+        self._recording_topic = topic
         self._recording = Recording()
 
     def stop_recording(self) -> dict:
         rec, self._recording = self._recording, None
         return rec.arrays()
 
-    def _on_state(self, msg: JointTrajectoryControllerState) -> None:
+    def _on_state(self, topic: str, msg: JointTrajectoryControllerState) -> None:
         rec = self._recording
-        if rec is None:
+        if rec is None or topic != self._recording_topic:
             return
         rec.stamps.append(msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9)
         rec.reference.append(msg.reference.positions)
