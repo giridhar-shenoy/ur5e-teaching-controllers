@@ -11,12 +11,12 @@ commit that adds this file. Session: 03:25–06:05 IST.
 | What | Commit(s) |
 |---|---|
 | Skeleton: license, Dockerfile, devcontainer, CI workflow, pre-commit | `caa7416` `df00db9` `4daa9c9` `316b247` |
-| Bringup: xacro overlay (effort ifaces, wrist F/T sensor, Gazebo-only payload), bench worlds, `sim.launch.py` (fixes two stock-launch failures on Lyrical) | `afa1c67`, gravity/payload/fallback `9ae8132`, damping `7f89cd9` |
-| Headless smoke test in CI (+ mode-switch check) | `cd641e0` `a2ef023` `959ede2` |
-| Controllers (a) PID + Pinocchio RNEA FF tracking, (b) gravity-comp hand guiding; Pinocchio wrapper; 41 gtest cases | `f0fa401`, review fixes `b591dcc`, deactivation fix `6309d05` |
-| Mode manager, `mode.launch.py`, benchmark drivers, GIF recorder | `8eb85e5` `e05757d` `ef8986f` `d34ee91` `cb270ef` |
-| Results (all rows at clean commit `cd02385`), figures, GIFs, README, docs | `4d60334` `035288a` |
-| Checkpoints 1–4 | `c7e4a7d` `006a136` `b25e11c` `7f22327` |
+| Bringup: xacro overlay (effort ifaces, wrist F/T sensor, Gazebo-only payload), bench worlds, `sim.launch.py` (fixes two stock-launch failures on Lyrical) | `afa1c67`, gravity/payload/fallback `3a74db5`, damping `c5c3498` |
+| Headless smoke test in CI (+ mode-switch check) | `cd641e0` `e30cd3a` `b24669c` |
+| Controllers (a) PID + Pinocchio RNEA FF tracking, (b) gravity-comp hand guiding; Pinocchio wrapper; 41 gtest cases | `f0fa401`, review fixes `52fc1ba`, deactivation fix `f2bcf5f` |
+| Mode manager, `mode.launch.py`, benchmark drivers, GIF recorder | `a54aa0d` `e73a586` `93b62f7` `0864cc8` `f293f86` |
+| Results (all rows at clean commit `c048632`), figures, GIFs, README, docs | `f29a1c1` `3f3d9bc` |
+| Checkpoints 1–4 | `c7e4a7d` `4e56640` `d278ae0` `eaec76c` |
 
 Full list: `git log --oneline` (all commits dated 2026-10-28).
 

@@ -117,7 +117,7 @@ Yes for everything except "CI green", which depends on the billing fix (WAITING 
 ## CHECKPOINT 2 — controllers (a) + (b) load, switch and move the arm headless (2026-10-28 04:50 IST)
 
 Wall-clock spent so far: 1 h 25 min. Evidence below is from runs at 04:00–04:30 in this session
-(commits `f0fa401` controllers, `8eb85e5` mode manager / drivers).
+(commits `f0fa401` controllers, `a54aa0d` mode manager / drivers).
 
 ### git status
 
@@ -227,7 +227,7 @@ Wall-clock spent so far: 2 h 25 min.
 ```text
 $ git status --short
  M CHECKPOINTS.md
-(only this report is uncommitted; HEAD 4d60334)
+(only this report is uncommitted; HEAD f29a1c1)
 ```
 
 ### CSVs
@@ -238,10 +238,10 @@ $ wc -l results/*.csv
   109 results/tracking.csv
   119 total
 $ cut -d, -f2-5 results/tracking.csv | sort -u
-e05757de9ac9,0.001,500,1
+e73a5866a475,0.001,500,1
 git_commit,sim_step_s,update_rate_hz,seed
 $ cut -d, -f2-5 results/handguide.csv | sort -u
-6309d051414d,0.001,500,1
+f2bcf5f5e9d5,0.001,500,1
 git_commit,sim_step_s,update_rate_hz,seed
 ```
 
@@ -296,7 +296,7 @@ Yes, apart from CI (needs the billing fix).
 
 ## CHECKPOINT 4 — final (2026-10-28 06:00 IST)
 
-Wall-clock spent: 2 h 35 min (03:25–06:00 IST). HEAD before this report: `035288a`.
+Wall-clock spent: 2 h 35 min (03:25–06:00 IST). HEAD before this report: `3f3d9bc`.
 
 ### git status
 
@@ -375,7 +375,7 @@ $ git log --oneline | wc -l
 ### Other acceptance lines
 
 - `scripts/regenerate_all.sh` end to end: 489 s, 438 s and 436 s wall in three full runs
-  (< 60 min). Final run at clean commit cd02385; every CSV row carries that hash and seed 1.
+  (< 60 min). Final run at clean commit c048632; every CSV row carries that hash and seed 1.
 - No hard-coded UR5e dynamics: `grep -rnE "8\.058|3\.761|0\.425|0\.392|2\.846" src
   --include=*.cpp --include=*.hpp | wc -l` → 0; all from robot_description via Pinocchio.
 - THIRD_PARTY.md: `.clang-format` only; no third-party code was copied.
