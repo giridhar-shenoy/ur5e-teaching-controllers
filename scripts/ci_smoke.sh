@@ -8,8 +8,9 @@
 #
 # For this repo's bringup it then switches to mode track and has the effort tracking controller
 # follow a trajectory with each control law (pid_ff, computed_torque), switches to mode handguide
-# and checks that the arm floats still, and checks that both effort controllers were configured
-# with the requested dynamics backend.
+# and checks that the arm floats still, switches to mode jog and checks that a streamed TCP twist
+# moves the arm and that it stops after the stream ends, and checks that the effort controllers
+# were configured with the requested dynamics backend.
 # The stock bringup is known to be unreliable on Lyrical: its `ros_gz_sim create` can spawn the
 # robot twice when Gazebo is slow to start (see sim.launch.py docstring and NOTES.md).
 #
@@ -29,6 +30,9 @@ TRACK_GOAL=(0.0 -1.57 1.57 -1.57 -1.57 0.0)
 TRACK_TOL_RAD=0.01
 # Hand-guiding check: with the model payload equal to the actual one (0 kg) the arm must not move.
 HOLD_TOL_RAD=0.005
+# Jog check: 1 s of 5 cm/s along base z must move the joints, and the deadman must stop them.
+JOG_MIN_MOTION_RAD=0.01
+JOG_STOP_TOL_RAD=0.001
 
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-11}" GZ_PARTITION="${GZ_PARTITION:-r1}"
 mkdir -p "${LOG_DIR}"
@@ -80,8 +84,22 @@ trap cleanup EXIT INT TERM
 
 remaining() { echo $((deadline - SECONDS)); }
 
+# One-shot publish to a controller topic. --keep-alive: a publisher that exits right after
+# publishing can lose the message before reliable delivery completes; --max-wait-time-secs: give
+# up on discovery after 30 s instead of eating the whole budget, and say what the graph shows.
+publish_once() {
+  local topic=$1 type=$2 msg=$3 log=$4
+  if ! timeout "$(remaining)" ros2 topic pub --once -w 1 --max-wait-time-secs 30 --keep-alive 2 \
+      "${topic}" "${type}" "${msg}" >"${log}" 2>&1; then
+    echo "[smoke] publishing to ${topic} failed; publisher output and topic info:"
+    cat "${log}"
+    timeout 10 ros2 topic info -v "${topic}" || true
+    return 1
+  fi
+}
+
 echo "[smoke] waiting for joint_state_broadcaster and joint_trajectory_controller to be active"
-until ros2 control list_controllers 2>/dev/null >"${LOG_DIR}/controllers.txt" \
+until timeout 10 ros2 control list_controllers 2>/dev/null >"${LOG_DIR}/controllers.txt" \
     && grep -Eq "^joint_trajectory_controller .*active" "${LOG_DIR}/controllers.txt" \
     && grep -Eq "^joint_state_broadcaster .*active" "${LOG_DIR}/controllers.txt"; do
   if [ "$(remaining)" -le 0 ]; then
@@ -148,14 +166,15 @@ PY
 
 if [ "${TARGET}" = "teaching" ]; then
   # Both teaching modes must switch cleanly and leave exactly the expected controller active.
-  for mode in track handguide; do
+  for mode in track handguide jog; do
     case "${mode}" in
       track) expected=pid_ff_trajectory_controller ;;
       handguide) expected=gravity_comp_handguide_controller ;;
+      jog) expected=tcp_jog_controller ;;
     esac
     timeout "$(remaining)" ros2 launch ur5e_teaching_bringup mode.launch.py "mode:=${mode}" \
       >"${LOG_DIR}/mode_${mode}.txt" 2>&1
-    ros2 control list_controllers >"${LOG_DIR}/controllers_${mode}.txt"
+    timeout 10 ros2 control list_controllers >"${LOG_DIR}/controllers_${mode}.txt"
     active=$(awk '$3 == "active" {print $1}' "${LOG_DIR}/controllers_${mode}.txt" | sort | tr '\n' ' ')
     echo "[smoke] mode ${mode}: active = ${active}"
     if [ "$(awk -v c="${expected}" '$1 == c {print $3}' "${LOG_DIR}/controllers_${mode}.txt")" != "active" ] \
@@ -167,12 +186,10 @@ if [ "${TARGET}" = "teaching" ]; then
       track)
         track_list=$(IFS=,; echo "${TRACK_GOAL[*]}")
         echo "[smoke] effort tracking: trajectory to ${track_list} in 3 s"
-        # --keep-alive: a one-shot publisher that exits right after publishing can lose the
-        # message before reliable delivery completes (seen once in CI on a loaded runner).
-        timeout "$(remaining)" ros2 topic pub --once -w 1 --keep-alive 2 \
-          /pid_ff_trajectory_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \
+        publish_once /pid_ff_trajectory_controller/joint_trajectory \
+          trajectory_msgs/msg/JointTrajectory \
           "{joint_names: [${joint_list}], points: [{positions: [${track_list}], time_from_start: {sec: 3}}]}" \
-          >"${LOG_DIR}/track_pub.txt" 2>&1
+          "${LOG_DIR}/track_pub.txt" || exit 5
         sleep 3
         err=$(max_diff "$(read_ordered)" "${TRACK_GOAL[*]}")
         echo "[smoke] effort tracking: max |q - goal| = ${err} rad (tolerance ${TRACK_TOL_RAD})"
@@ -182,10 +199,10 @@ if [ "${TARGET}" = "teaching" ]; then
         timeout "$(remaining)" ros2 param set /pid_ff_trajectory_controller control_law \
           computed_torque >"${LOG_DIR}/param_ct.txt" 2>&1 || { cat "${LOG_DIR}/param_ct.txt"; exit 5; }
         echo "[smoke] computed torque: trajectory to ${goal_list} in 3 s"
-        timeout "$(remaining)" ros2 topic pub --once -w 1 --keep-alive 2 \
-          /pid_ff_trajectory_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \
+        publish_once /pid_ff_trajectory_controller/joint_trajectory \
+          trajectory_msgs/msg/JointTrajectory \
           "{joint_names: [${joint_list}], points: [{positions: [${goal_list}], time_from_start: {sec: 3}}]}" \
-          >"${LOG_DIR}/track_ct_pub.txt" 2>&1
+          "${LOG_DIR}/track_ct_pub.txt" || exit 5
         sleep 3
         err=$(max_diff "$(read_ordered)" "${GOAL[*]}")
         echo "[smoke] computed torque: max |q - goal| = ${err} rad (tolerance ${TRACK_TOL_RAD})"
@@ -202,12 +219,27 @@ if [ "${TARGET}" = "teaching" ]; then
         echo "[smoke] hand guiding: max joint drift over 1 s = ${drift} rad (tolerance ${HOLD_TOL_RAD})"
         python3 -c "import sys; sys.exit(0 if ${drift} <= ${HOLD_TOL_RAD} else 1)" || exit 6
         ;;
+      jog)
+        p0="$(read_ordered)"
+        echo "[smoke] jog: streaming 5 cm/s along base z at 50 Hz for 1 s"
+        timeout "$(remaining)" ros2 topic pub -w 1 -r 50 --times 50 /tcp_jog_controller/twist \
+          geometry_msgs/msg/TwistStamped "{header: {frame_id: world}, twist: {linear: {z: 0.05}}}" \
+          >"${LOG_DIR}/jog_pub.txt" 2>&1
+        sleep 0.5  # deadman (0.1 s) and deceleration
+        p1="$(read_ordered)"
+        sleep 0.5
+        p2="$(read_ordered)"
+        moved=$(max_diff "${p1}" "${p0}")
+        after=$(max_diff "${p2}" "${p1}")
+        echo "[smoke] jog: moved ${moved} rad (min ${JOG_MIN_MOTION_RAD}), then ${after} rad in 0.5 s (max ${JOG_STOP_TOL_RAD})"
+        python3 -c "import sys; sys.exit(0 if ${moved} >= ${JOG_MIN_MOTION_RAD} and ${after} <= ${JOG_STOP_TOL_RAD} else 1)" || exit 8
+        ;;
     esac
   done
   configured=$(grep -c "dynamics backend: ${BACKEND}," "${LOG_DIR}/launch.log" || true)
   echo "[smoke] effort controllers configured with the ${BACKEND} backend: ${configured}"
-  if [ "${configured}" -lt 2 ]; then
-    echo "[smoke] expected both effort controllers to report 'dynamics backend: ${BACKEND}'"
+  if [ "${configured}" -lt 3 ]; then
+    echo "[smoke] expected all three effort controllers to report 'dynamics backend: ${BACKEND}'"
     exit 7
   fi
 fi
