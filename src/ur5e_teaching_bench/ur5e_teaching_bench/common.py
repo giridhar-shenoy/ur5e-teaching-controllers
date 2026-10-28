@@ -112,6 +112,8 @@ class BenchNode(Node):
         for name, value in values.items():
             if isinstance(value, bool):
                 pv = ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=value)
+            elif isinstance(value, str):
+                pv = ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=value)
             elif isinstance(value, float | int):
                 pv = ParameterValue(type=ParameterType.PARAMETER_DOUBLE, double_value=float(value))
             else:
@@ -135,6 +137,7 @@ class BenchNode(Node):
         return {
             ParameterType.PARAMETER_INTEGER: value.integer_value,
             ParameterType.PARAMETER_DOUBLE: value.double_value,
+            ParameterType.PARAMETER_STRING: value.string_value,
         }.get(value.type, None)
 
     # ---- trajectories ----------------------------------------------------------------------
@@ -157,14 +160,14 @@ class BenchNode(Node):
         self._pubs[topic].publish(msg)
 
     def home(self, pose=HOME, duration_s: float = 2.0, settle_s: float = 1.0) -> None:
-        """Move to `pose` with the effort tracking controller, feedforward on.
+        """Move to `pose` with the effort tracking controller, PID + feedforward.
 
         Not with the stock position JTC: switching a joint from effort back to position in
         gz_ros2_control 3.0.9 leaves it uncommanded and the arm falls (see NOTES.md).
         """
         controller = "pid_ff_trajectory_controller"
         self.switcher.ensure_configured(controller)
-        self.set_params(controller, {"feedforward": True})
+        self.set_params(controller, {"control_law": "pid_ff", "feedforward": True})
         self.switcher.activate_exclusive(controller)
         self.publish_trajectory(controller, [pose], [duration_s])
         self.sleep_sim(duration_s + settle_s)

@@ -27,7 +27,9 @@ README = ROOT / "README.md"
 BEGIN, END = "<!-- results:begin -->", "<!-- results:end -->"
 HEAD_BEGIN, HEAD_END = "<!-- headline:begin -->", "<!-- headline:end -->"
 
-# Reference palette (dataviz skill, validated light/dark): slot 1 blue, slot 2 orange.
+# Reference palette (dataviz skill, validated light/dark): slot 1 blue, slot 2 orange, slot 3
+# aqua (the three validate all-pairs in both modes; light aqua is below 3:1 on the surface, so
+# every dot carries a direct value label and the tables are the table view).
 THEMES = {
     "light": {
         "surface": "#fcfcfb",
@@ -38,6 +40,7 @@ THEMES = {
         "axis": "#c3c2b7",
         "s1": "#2a78d6",
         "s2": "#eb6834",
+        "s3": "#1baf7a",
     },
     "dark": {
         "surface": "#1a1a19",
@@ -48,6 +51,7 @@ THEMES = {
         "axis": "#383835",
         "s1": "#3987e5",
         "s2": "#d95926",
+        "s3": "#199e70",
     },
 }
 
@@ -65,24 +69,43 @@ def pm(values, scale=1.0, digits=2) -> str:
 def stamp(rows: list[dict]) -> str:
     commits = sorted({r["git_commit"] for r in rows})
     seeds = sorted({r["seed"] for r in rows})
+    backends = sorted({r["dynamics_backend"] for r in rows if r.get("dynamics_backend")})
     return (
         f"commit `{', '.join(commits)}`, seed {', '.join(seeds)}, physics step "
-        f"{rows[0]['sim_step_s']} s, controller update rate {rows[0]['update_rate_hz']} Hz"
+        f"{rows[0]['sim_step_s']} s, controller update rate {rows[0]['update_rate_hz']} Hz, "
+        f"dynamics backend {', '.join(backends) or 'pinocchio'}"
     )
 
 
 # ---------------------------------------------------------------------------- tracking
+# Tracking variants in display order: (CSV value, label). v0.1 CSVs have a `feedforward` column
+# (0 = pid, 1 = pid_ff) instead of `variant`.
+VARIANTS = (("pid", "PID"), ("pid_ff", "PID + RNEA FF"), ("computed_torque", "Computed torque"))
+LABEL = dict(VARIANTS)
+
+
+def variant_of(row: dict) -> str:
+    if row.get("variant"):
+        return row["variant"]
+    return "pid_ff" if int(row["feedforward"]) else "pid"
+
+
+def present_variants(worst_rmse) -> list[str]:
+    have = {v for _, v in worst_rmse}
+    return [v for v, _ in VARIANTS if v in have]
+
+
 def tracking(rows: list[dict]):
-    """worst[(speed, ff)] = list over reps of max-over-joints RMSE (and max |e|)."""
+    """worst[(speed, variant)] = list over reps of max-over-joints RMSE (and max |e|)."""
     per_rep = defaultdict(list)
     for r in rows:
-        per_rep[(float(r["speed_scale"]), int(r["feedforward"]), int(r["rep"]))].append(r)
+        per_rep[(float(r["speed_scale"]), variant_of(r), int(r["rep"]))].append(r)
     worst_rmse, worst_max, per_joint = defaultdict(list), defaultdict(list), defaultdict(list)
-    for (speed, ff, _rep), joints in sorted(per_rep.items()):
-        worst_rmse[(speed, ff)].append(max(float(j["rmse_rad"]) for j in joints))
-        worst_max[(speed, ff)].append(max(float(j["max_abs_err_rad"]) for j in joints))
+    for (speed, variant, _rep), joints in sorted(per_rep.items()):
+        worst_rmse[(speed, variant)].append(max(float(j["rmse_rad"]) for j in joints))
+        worst_max[(speed, variant)].append(max(float(j["max_abs_err_rad"]) for j in joints))
         for j in joints:
-            per_joint[(speed, ff, j["joint"])].append(
+            per_joint[(speed, variant, j["joint"])].append(
                 (float(j["rmse_rad"]), float(j["max_abs_err_rad"]))
             )
     return worst_rmse, worst_max, per_joint
@@ -90,19 +113,17 @@ def tracking(rows: list[dict]):
 
 def tracking_summary_table(worst_rmse, worst_max) -> list[str]:
     speeds = sorted({s for s, _ in worst_rmse})
+    variants = present_variants(worst_rmse)
+    head = " | ".join(f"{LABEL[v]}: worst-joint RMSE (mrad)" for v in variants)
+    head_max = " | ".join(f"{LABEL[v]}: worst max \\|e\\| (mrad)" for v in variants)
     lines = [
-        "| Speed (× nominal) | PID: worst-joint RMSE (mrad) "
-        "| PID + RNEA FF: worst-joint RMSE (mrad) "
-        "| PID: worst max \\|e\\| (mrad) | PID + RNEA FF: worst max \\|e\\| (mrad) "
-        "| Regenerate with |",
-        "|---|---|---|---|---|---|",
+        f"| Speed (× nominal) | {head} | {head_max} | Regenerate with |",
+        "|---|" + "---|" * (2 * len(variants)) + "---|",
     ]
     for s in speeds:
-        lines.append(
-            f"| {s:g} | {pm(worst_rmse[(s, 0)], 1e3)} | {pm(worst_rmse[(s, 1)], 1e3)} | "
-            f"{pm(worst_max[(s, 0)], 1e3)} | {pm(worst_max[(s, 1)], 1e3)} | "
-            "`scripts/bench_tracking.sh` |"
-        )
+        rmse = " | ".join(pm(worst_rmse[(s, v)], 1e3) for v in variants)
+        mx = " | ".join(pm(worst_max[(s, v)], 1e3) for v in variants)
+        lines.append(f"| {s:g} | {rmse} | {mx} | `scripts/bench_tracking.sh` |")
     return lines
 
 
@@ -115,14 +136,14 @@ def tracking_joint_table(per_joint) -> list[str]:
         "| Speed | Variant | " + " | ".join(f"{j} RMSE / max (mrad)" for j in joints) + " |",
         "|---|---|" + "---|" * len(joints),
     ]
+    have = {k[1] for k in per_joint}
     for s in sorted({k[0] for k in per_joint}):
-        for ff in (0, 1):
+        for v in (v for v, _ in VARIANTS if v in have):
             cells = []
             for j in joints:
-                vals = np.asarray(per_joint[(s, ff, j)])
+                vals = np.asarray(per_joint[(s, v, j)])
                 cells.append(f"{pm(vals[:, 0], 1e3)} / {pm(vals[:, 1], 1e3)}")
-            name = "PID + RNEA FF" if ff else "PID"
-            lines.append(f"| {s:g} | {name} | " + " | ".join(cells) + " |")
+            lines.append(f"| {s:g} | {LABEL[v]} | " + " | ".join(cells) + " |")
     return lines
 
 
@@ -177,14 +198,18 @@ def plot_tracking(worst_rmse, theme: str, path: Path):
     t = THEMES[theme]
     speeds = sorted({s for s, _ in worst_rmse})
     x = np.arange(len(speeds))
-    w = 0.3
+    variants = present_variants(worst_rmse)
+    w = 0.6 / len(variants)
     fig, ax = plt.subplots(figsize=(6.4, 3.4), dpi=150)
     fig.patch.set_facecolor(t["surface"])
-    for k, (ff, name, color) in enumerate(((0, "PID", t["s1"]), (1, "PID + RNEA FF", t["s2"]))):
-        vals = [np.asarray(worst_rmse[(s, ff)]) * 1e3 for s in speeds]
+    colors = (t["s1"], t["s2"], t["s3"])  # fixed slot per variant, in VARIANTS order
+    slot = {v: k for k, (v, _) in enumerate(VARIANTS)}
+    for k, variant in enumerate(variants):
+        name, color = LABEL[variant], colors[slot[variant]]
+        vals = [np.asarray(worst_rmse[(s, variant)]) * 1e3 for s in speeds]
         means = [v.mean() for v in vals]
         stds = [v.std(ddof=1) if v.size > 1 else 0.0 for v in vals]
-        xs = x + (k - 0.5) * w
+        xs = x + (k - (len(variants) - 1) / 2) * w
         # Dots, not bars: on a log axis a bar's length has no meaning.
         ax.errorbar(
             xs,
@@ -229,7 +254,7 @@ def plot_tracking(worst_rmse, theme: str, path: Path):
         fontsize=8,
         loc="lower right",
         bbox_to_anchor=(1.0, 1.0),
-        ncol=2,
+        ncol=len(variants),
         borderaxespad=0.2,
     )
     for text in leg.get_texts():
@@ -435,7 +460,9 @@ def results_markdown(track_rows, hg_rows, timing_rows=()) -> tuple[str, str]:
             "Method: the arm is homed by the tracking controller itself (feedforward on) to a",
             "seeded random offset (≤ 0.05 rad per joint) from the home pose; for the PID-only",
             "variant feedforward is then switched off and the integrator given 3 s to carry",
-            "gravity. A 3-waypoint path (2.5 s per segment at 1×) is sent on",
+            "gravity; the computed-torque variant switches the same controller to",
+            "`control_law: computed_torque` (ω, ζ per joint from `controllers.yaml`), with no",
+            "integral term. A 3-waypoint path (2.5 s per segment at 1×) is sent on",
             "`~/joint_trajectory`. The error is the controller's own `q_des − q` at 500 Hz,",
             "from trajectory start to 0.5 s after the last",
             'reference motion. "Worst joint" = the joint with the largest RMSE in that run.',
@@ -484,14 +511,20 @@ def headline(track_rows, hg_rows) -> str:
     """The README's third sentence: one tracking number and one hand-guiding number."""
     worst_rmse, _, _ = tracking(track_rows)
     by = handguide(hg_rows)
-    speed = 1.0 if (1.0, 1) in worst_rmse else sorted(worst_rmse)[0][0]
+    speed = 1.0 if (1.0, "pid_ff") in worst_rmse else sorted(worst_rmse)[0][0]
     over = [(m, a) for (m, a) in by if a - m > 0]
     model, actual = max(over, key=lambda k: k[1] - k[0]) if over else next(iter(by))
     rs = by[(model, actual)]
+    ct = (
+        f", computed torque {pm(worst_rmse[(speed, 'computed_torque')], 1e3)} mrad"
+        if (speed, "computed_torque") in worst_rmse
+        else ""
+    )
     return (
         f"At {speed:g}× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE "
-        f"to {pm(worst_rmse[(speed, 1)], 1e3)} mrad (PID alone: "
-        f"{pm(worst_rmse[(speed, 0)], 1e3)} mrad), and in hand guiding a {actual - model:g} kg "
+        f"to {pm(worst_rmse[(speed, 'pid_ff')], 1e3)} mrad (PID alone: "
+        f"{pm(worst_rmse[(speed, 'pid')], 1e3)} mrad{ct}), and in hand guiding a "
+        f"{actual - model:g} kg "
         f"payload-model error costs the operator {pm([r['hold_force_z_n'] for r in rs])} N "
         f"of vertical force to hold the arm still "
         f"(Δm·g = {float(rs[0]['expected_hold_force_z_n']):.2f} N) and, let go, carries the "
