@@ -276,6 +276,9 @@ the first real CI run (40766406049) started at 20:47 UTC on 28 Oct.
 | Run | Result | Cause → fix |
 |---|---|---|
 | [40766406049](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40766406049) | lint ✓, image build ✓ (6 min 46 s, cold cache), rosdep ✓, colcon build ✓ (2 min 13 s), **colcon test ✗** | `ur5e_teaching_bench`: "Ran 0 tests … NO TESTS RAN", exit 5. The container's setuptools warns `Unknown distribution option: 'tests_require'` and colcon there no longer sees pytest as a test dependency, so it falls back to unittest, which finds none of the pytest-style tests. Locally (colcon-core 0.21.3) the same setup.py worked. Fix: declare `extras_require={"test": ["pytest"]}`, which colcon-core maps to test dependencies (`colcon_core/package_augmentation/python.py`, `extras_mapping`); locally `colcon test --packages-select ur5e_teaching_bench` → 3 tests, 0 failures. |
+| [40768154969](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40768154969) | **success** (6 min 9 s; image 2 min 34 s from the layer cache, colcon build 2 min 4 s, `Summary: 48 tests, 0 errors, 0 failures, 0 skipped`, `[smoke] PASS in 23 s`) | — |
+
+Step 0 took 22 min wall (02:18–02:40 IST); one fix. CI is green at `ca71285`.
 
 ## CHANGELOG entry for this session
 

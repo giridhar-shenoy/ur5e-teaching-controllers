@@ -390,3 +390,41 @@ NOTES.md open question 6.
 Yes. Everything on the MUST list is done and verified locally; CI turns green as soon as the
 billing issue is fixed, unless the image build or a container-only difference fails, which
 nobody can see before then.
+
+## v0.2 CHECKPOINT 1 — CI green on main (2026-10-29 02:40 IST)
+
+Wall-clock spent: 0 h 22 min (session start 02:18 IST). The repo is public
+(`gh repo view --json visibility` → `"visibility":"PUBLIC"`), so Actions runs for the first time.
+
+### CI runs
+
+| Run | Commit | Result |
+|---|---|---|
+| [40766406049](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40766406049) | `933fae5` | failure in `colcon test`: `ur5e_teaching_bench` "NO TESTS RAN" (exit 5) |
+| [40768154969](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40768154969) | `ca71285` fix(bench): declare pytest as an extras_require test dependency | **success**, 6 min 9 s |
+
+```text
+$ gh run view 40768154969 --json conclusion,jobs --jq '.conclusion, (.jobs[0].steps[] | "\(.name) \(.conclusion)")'
+success
+Set up job success
+Checkout success
+Set up Python (pre-commit) success
+Lint (pre-commit) success
+Set up Docker Buildx success
+Build image (apt layers cached in the GHA cache) success
+Start container success
+rosdep install success
+colcon build success
+colcon test success
+Results tables match the CSVs success
+Smoke test (Gazebo server-only, physics only) success
+...
+$ grep "Summary: 48\|smoke\] PASS" <run log>
+colcon test   Summary: 48 tests, 0 errors, 0 failures, 0 skipped
+Smoke test    [smoke] PASS in 23 s
+```
+
+- The Docker image (`FROM ros:lyrical-ros-base`) builds on the runner: 6 min 46 s cold,
+  2 min 34 s with the GHA layer cache. This was the v0.1 item that could not be checked without Docker.
+- No test was skipped or weakened; the only change was how the Python package declares pytest.
+- Branch protection: not enabled (waiting for Giri, see the checkpoint message).
