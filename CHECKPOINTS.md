@@ -597,3 +597,93 @@ CI for checkpoint 2 (`8949478`):
 ### Does Sunday 1 Nov hold?
 
 Yes.
+
+## v0.2 CHECKPOINT 4 — tracking rerun done; README, results.md, what_broke.md, CHANGELOG updated (2026-10-29 04:47 IST)
+
+Wall-clock spent: 2 h 29 min (session start 02:18 IST), of which roughly 40 min waiting for
+locks held by other sessions' training runs and, 03:33–03:39, by two orphaned processes of mine
+(NOTES.md, 03:34 incident).
+
+### git status (before this checkpoint's commit)
+
+```text
+$ git status --short
+ M MORNING.md
+ M NOTES.md
+ M scripts/ci_smoke.sh          (jog leg; committed after its Gazebo check)
+$ git log --oneline d5c2a2b..HEAD
+763a7b9 docs: document the jog controller and correct the computed-torque finding
+8cc3ffe data: replace the tracking table with the three-column rerun (pid, pid_ff, CT)
+cd0cfa4 fix(scripts): bound the controller poll in sim_session.sh
+d2509d4 feat(bench): add bench_jog for command-to-motion latency of the jog controller
+c66be22 feat(controllers): add TcpJogController (mode jog), DLS with scheduled damping
+6bf35f4 docs: record the aborted rerun attempt and the orphaned lock holders
+```
+
+### Checklist
+
+- [x] **bench_tracking rerun, 3 speeds × {pid, pid_ff, computed_torque} × 3 reps, Pinocchio,
+  alone** (heavy → build → gazebo locks, `scripts/lib/heavy_processes.sh` quiet, refuses a
+  dirty tree)
+
+  ```text
+  [runner] quiet; load 1.21 4.15 5.59
+  [sim] up (sid 153734, waited 1 s for the lock)
+  [bench_tracking] done in 393 s wall -> results/tracking.csv
+  [runner] exit 0 at 03:45:53
+  $ python3 - (row count)  → 162 rows, git_commit 6bf35f463513 ×162, dynamics_backend pinocchio ×162
+  ```
+
+  Worst-joint RMSE (mrad), mean ± std: 0.5× 5.34 / 0.08 / 0.09, 1× 8.81 / 0.21 / 0.21,
+  2× 10.68 / 0.37 / 0.38 (PID / PID + FF / CT). An earlier attempt was aborted before
+  recording (dirty tree; NOTES.md).
+
+- [x] **The PID + FF level vs v0.1 is explained as far as I can** (A/B, diagnostics to /tmp,
+  not published): the v0.1 code (`c35e70c`) rebuilt in `/tmp/r1_v01` and run with its own
+  script under the same locks gives PID + FF 0.242 ± 0.008 mrad at 1× (published on 28 Oct:
+  0.045 ± 0.028); PID rows match to 0.02 mrad. No package changed in between. Not a v0.2
+  regression; machine-state dependent. Table in NOTES.md.
+
+- [x] **README and docs/results.md: three-column table, generated**
+
+  ```text
+  $ python3 scripts/make_results.py --check --no-plots
+  results up to date
+  README headline: At 1× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE
+  to 0.21 ± 0.03 mrad (PID alone: 8.81 ± 0.01 mrad, computed torque 0.21 ± 0.04 mrad), ...
+  ```
+
+  Tracking figure regenerated with the third series (dataviz palette slot 3, validated
+  all-pairs light and dark; direct labels on every dot). README: intro, modes table (jog),
+  "Two dynamics backends", "Where it fails" items 6 (computed torque, corrected) and 9 (CPU
+  load and the A/B), "What I'd do next".
+
+- [x] **docs/what_broke.md** — DRAFT, first person, 688 words in the body, from NOTES.md and
+  CHECKPOINTS.md; no employer content, no auto-tuner.
+
+- [x] **CHANGELOG** — v0.2 Added / Changed / Fixed entries.
+
+- [x] **Tests and lint**
+
+  ```text
+  $ colcon test && colcon test-result
+  Summary: 87 tests, 0 errors, 0 failures, 0 skipped
+  $ pre-commit run --files <all changed files>     → all hooks Passed
+  ```
+
+- [x] **Correction to CHECKPOINT 3**: its "computed torque ~2.2× worse than PID + FF" came from
+  a check made while other sessions were compiling. On the quiet rerun the two are equal
+  within their spread (0.21 ± 0.04 vs 0.21 ± 0.03 mrad at 1×). The README, controllers.md and
+  NOTES.md say so.
+
+### What is left
+
+- Gazebo checks of the jog controller (smoke leg on both backends, a 1-rep bench_jog to /tmp):
+  queued behind R2's benchmark chain, which holds the gazebo lock.
+- Push this checkpoint and watch CI.
+- Waiting for Giri: branch protection (A), publishing bench_jog numbers (C).
+
+### Does Sunday 1 Nov hold?
+
+Yes. MUST and SHOULD (computed torque, the rerun, the jog controller) are done; what remains
+is a sim check of the jog controller and two decisions for Giri.
