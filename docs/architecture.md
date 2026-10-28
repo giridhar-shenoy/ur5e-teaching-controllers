@@ -19,7 +19,7 @@ flowchart LR
       JTC["joint_trajectory_controller<br/>claims */position (homing)"]
       PID["PidFfTrajectoryController<br/>claims */effort (mode: track)"]
       HG["GravityCompHandGuidingController<br/>claims */effort (mode: handguide)"]
-      PIN[("Pinocchio model<br/>from robot_description")]
+      PIN[("DynamicsModel from robot_description<br/>Pinocchio (default) | KDL<br/>param dynamics_backend")]
     end
     PHYS --- HW
     FTS --> HW
@@ -30,6 +30,8 @@ flowchart LR
   BR["ros_gz_bridge<br/>/clock, /world/bench/wrench[/persistent|/clear]"]
   MM["mode_manager (Python)<br/>strict switch_controller"]
   BENCH["bench_tracking / bench_handguide (Python)<br/>record, analyse, CSV"]
+  TIMING["bench_dynamics_timing (C++, standalone)<br/>no ROS graph, no Gazebo"]
+  TIMING -.->|same DynamicsModel library| PIN
 
   CM --> JSB & FTB & JTC & PID & HG
   PID --- PIN
@@ -62,15 +64,17 @@ on one joint would otherwise both be accepted by the resource manager).
 ## Data flow of one control cycle (2 ms)
 
 1. `gz_ros2_control` reads joint position/velocity and the F/T wrench from Gazebo.
-2. The active effort controller reads its state interfaces, evaluates its control law with
-   Pinocchio (allocation-free; buffers are sized in `on_configure`), and writes torques.
+2. The active effort controller reads its state interfaces, evaluates its control law with its
+   dynamics backend (allocation-free; buffers are sized in `on_configure`), and writes torques.
 3. The controller copies its state into a pre-sized message and hands it to a
    `realtime_tools::RealtimePublisher` (non-blocking `try_publish`).
 4. `gz_ros2_control` applies the torques as joint forces for the next two 1 ms physics steps.
 
 Non-realtime work stays out of `update()`: new trajectories are validated and re-profiled in the
-subscription callback and handed over through a `RealtimeThreadSafeBox`; the realtime loop only
-swaps a `shared_ptr` when it can take the box without blocking.
+subscription callback, and a payload change is built into a new dynamics model in the parameter
+callback (for KDL that includes rebuilding its solvers). Both are handed over through a
+`RealtimeThreadSafeBox`; the realtime loop only swaps a `shared_ptr` when it can take the box
+without blocking, and never frees what it replaces.
 
 ## Why the launch file is not a wrapper of `ur_sim_control.launch.py`
 
@@ -81,6 +85,7 @@ both; details in its docstring and in `NOTES.md`.
 
 ## Language split
 
-C++17 for everything in the control loop (controllers, dynamics wrapper, profiles); Python for
+C++17 for everything in the control loop (controllers, dynamics backends, profiles) and the
+timing benchmark; Python for
 orchestration, recording, analysis and plots — a 2 ms loop must not depend on a garbage
 collector, and nothing outside the loop needs C++.
