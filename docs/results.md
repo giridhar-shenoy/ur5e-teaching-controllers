@@ -23,6 +23,12 @@ Every number on this page is computed by `scripts/make_results.py` from the CSVs
 | 1 / 1 | +0 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 | `scripts/bench_handguide.sh` |
 | 1 / 2 | +1 | 201.97 ± 2.39 | 201.04 ± 3.53 | 9.81 ± 0.00 | 9.81 | `scripts/bench_handguide.sh` |
 
+**Cost of one dynamics call** (gravity g(q) and RNEA on each backend, single thread; median / p95 over 100 000 timed calls):
+
+| Per call, median / p95 (µs) | Pinocchio g(q) | Pinocchio RNEA | KDL g(q) | KDL RNEA | Worst p95, share of the 2 ms cycle | Regenerate with |
+|---|---|---|---|---|---|---|
+| UR5e, 6 DoF, one thread | 0.538 / 0.740 | 0.887 / 1.123 | 1.678 / 1.748 | 1.702 / 2.155 | 0.1077 % | `scripts/bench_dynamics_timing.sh` |
+
 ## Tracking — details
 
 `results/tracking.csv`: commit `c35e70c82023`, seed 1, physics step 0.001 s, controller update rate 500 Hz; 3 repetitions per condition.
@@ -75,3 +81,29 @@ gravity of 9.8, and a controller that zeroed its torque on deactivation) and are
 described in NOTES.md.
 
 ![handguide](assets/handguide_light.png)
+
+## Dynamics timing — details
+
+`results/dynamics_timing.csv`: commit `96365efa478c`, build type RelWithDebInfo, CPU 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz, 100,000 timed calls per row, seed 1.
+
+Method: `bench_dynamics_timing` (C++, no ROS graph, no simulator, one thread) loads
+the simulation's URDF into each backend through the same `DynamicsModel` interface the
+controllers use, draws the states up front (q uniform inside the URDF position limits,
+q̇ inside the velocity limits, |q̈| ≤ 10 rad/s², seeded), makes 1 000 warm-up calls
+and then times every call on its own with `std::chrono::steady_clock`. Times include
+the wrapper's joint reordering and the timer itself (the *two clock reads only* row);
+nothing is subtracted. *Share of 2 ms* is the time divided by one 500 Hz control cycle.
+`scripts/bench_dynamics_timing.sh` refuses to run next to a simulator, build, pip
+install or training run, and its log records the load average and the busiest
+processes at start; on the shared dev laptop it runs under the machine's heavy, build
+and Gazebo locks. In three back-to-back runs on 29 Oct the medians moved by up to ~12 %
+(NOTES.md). These are laptop numbers: CI runs the executable as a 1 000-call smoke
+test only, and runner timings are not published.
+
+| Backend | Call | Median (µs) | p95 (µs) | Mean (µs) | Max (µs) | Median, share of 2 ms | p95, share of 2 ms |
+|---|---|---|---|---|---|---|---|
+| Pinocchio | g(q) | 0.538 | 0.740 | 0.568 | 39.23 | 0.0269 % | 0.0370 % |
+| Pinocchio | RNEA | 0.887 | 1.123 | 0.921 | 41.70 | 0.0443 % | 0.0562 % |
+| KDL | g(q) | 1.678 | 1.748 | 1.719 | 51.41 | 0.0839 % | 0.0874 % |
+| KDL | RNEA | 1.702 | 2.155 | 1.765 | 130.96 | 0.0851 % | 0.1077 % |
+| — | two clock reads only | 0.016 | 0.017 | 0.017 | 39.68 | 0.0008 % | 0.0008 % |

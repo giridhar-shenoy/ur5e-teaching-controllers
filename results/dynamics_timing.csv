@@ -1,0 +1,6 @@
+bench,git_commit,build_type,cpu,seed,calls,backend,function,median_us,p95_us,mean_us,max_us,median_cycle_fraction,p95_cycle_fraction
+dynamics_timing,96365efa478c,RelWithDebInfo,"11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",1,100000,none,clock,0.0160,0.0170,0.0166,39.68,0.000008,0.000008
+dynamics_timing,96365efa478c,RelWithDebInfo,"11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",1,100000,pinocchio,gravity,0.5380,0.7400,0.5683,39.23,0.000269,0.000370
+dynamics_timing,96365efa478c,RelWithDebInfo,"11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",1,100000,pinocchio,rnea,0.8870,1.1230,0.9214,41.70,0.000443,0.000562
+dynamics_timing,96365efa478c,RelWithDebInfo,"11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",1,100000,kdl,gravity,1.6780,1.7480,1.7193,51.41,0.000839,0.000874
+dynamics_timing,96365efa478c,RelWithDebInfo,"11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",1,100000,kdl,rnea,1.7020,2.1550,1.7647,130.96,0.000851,0.001077
