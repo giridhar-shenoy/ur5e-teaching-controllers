@@ -12,8 +12,13 @@ $\Delta t = 2$ ms controller period.
 ## (a) PidFfTrajectoryController — mode `track`
 
 **Input.** `trajectory_msgs/JointTrajectory` on `~/joint_trajectory` (topic only; the
-FollowJointTrajectory action is listed under "What's next"). A new message pre-empts the
-running trajectory and starts from the current desired state.
+FollowJointTrajectory action is listed under "What's next"). Points are mapped by joint name;
+trajectories with non-finite values or targets outside the URDF limits are rejected. A new
+message pre-empts the running trajectory and starts from the current desired position at zero
+velocity (so pre-empting at speed steps $\dot q_{des}$ to zero — a known v0.1 limitation). The
+profile is built in the subscription callback and handed to `update()` through a
+`RealtimeThreadSafeBox`; it is dropped if its start is more than `max_start_deviation` from the
+current desired state when the realtime loop picks it up.
 
 **Re-profiling.** Each segment between waypoints is a rest-to-rest trapezoid with the "1/3
 rule" (accelerate, cruise, decelerate for $T/3$ each). For a joint distance $D$ in time $T$:
@@ -67,8 +72,10 @@ have no friction; on a real arm it is where identified friction goes.
 
 **Runtime payload.** `payload_mass` and `payload_com` can be set while the controller runs
 (`ros2 param set`). The new values are pushed into the inertia of the body that carries
-`tool0` (payload = solid 6 cm cube, the same shape the Gazebo payload link uses), so $\hat g$
-and $\hat C$ change on the next cycle.
+`tool0` (payload = solid 6 cm cube, CoM 3 cm along tool z by default, the same shape and place
+as the Gazebo payload link), so $\hat g$ and $\hat C$ change on the next cycle. Runtime
+parameter changes are picked up without blocking (`try_update_params`) and adopted only as a
+whole set whose per-joint arrays still have one entry per joint.
 
 **What the operator feels.** With a perfect model the arm floats and a push $F$ at the tool
 moves it against the damping only. With a payload error $\Delta m = m_{actual} - m_{model}$ the
@@ -80,9 +87,18 @@ release acceleration ($F = -J^{-T} M \ddot q$) and compares it with $\Delta m\,g
 
 - *Joint-limit repulsion*: within `limit_margin` of a URDF position limit a spring of stiffness
   `limit_stiffness` pushes the joint back (zero in the interior).
-- *Speed cap*: if any $|\dot q_j|$ exceeds `max_joint_velocity[j]` the controller writes zero
-  torque and returns `ERROR`, and the controller manager deactivates it. In simulation the arm
-  then falls; on a real arm this is where the brakes engage. Re-home with mode `track`.
+- *Speed cap*: if any $|\dot q_j|$ exceeds `max_joint_velocity[j]` the controller writes its
+  gravity-compensation-plus-damping torque one last time and returns `ERROR`; the controller
+  manager deactivates it and activates its
+  `fallback_controllers` (configured: the tracking controller), which holds the joints where
+  the trip happened. Verified in simulation by lowering the cap at runtime and pushing the
+  wrist. Without a fallback the last torque would stay applied while the arm moves away from the
+  pose it was computed for; on a real arm the brakes engage.
+
+**Hand-over between controllers.** On deactivation neither controller touches the command
+interface: the last torque stays until the next controller writes. Writing zero there (the
+first version) dropped the arm under gravity for one 2 ms cycle at every switch, which the
+hand-guiding benchmark exposed as a 0.05 rad/s jolt at the elbow.
 
 ## Dynamics wrapper — `PinocchioModel`
 
