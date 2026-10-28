@@ -482,3 +482,20 @@ TEST_F(LoadControllersTest, UnknownDynamicsBackendIsRejectedAtLoad)
   // one_of<> validation: the parameter listener refuses "rbdl", so on_init fails.
   EXPECT_EQ(cm_->load_controller("bad_backend"), nullptr);
 }
+
+TEST_F(LoadControllersTest, ComputedTorqueCanBeSelectedAtRuntimeAndHoldsWithGravity)
+{
+  activate("track");
+  auto controller = cm_->get_loaded_controllers()[0].c;
+  EXPECT_FALSE(controller->get_node()->set_parameter({"control_law", "lqr"}).successful);
+  ASSERT_TRUE(controller->get_node()->set_parameter({"control_law", "computed_torque"}).successful);
+  std::this_thread::sleep_for(100ms);
+  const StateMsg state = latest_state();
+  stop_loops();
+  // Holding with zero error and zero velocity: RNEA(q, 0, 0) = g(q).
+  const Eigen::VectorXd g = gravity_at(state, 0.0);
+  for (int j = 0; j < 6; ++j) {
+    EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-9) << kJoints[j];
+    EXPECT_NEAR(state.reference.effort[static_cast<std::size_t>(j)], g[j], 1e-9) << kJoints[j];
+  }
+}

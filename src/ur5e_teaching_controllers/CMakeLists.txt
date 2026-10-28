@@ -133,6 +133,11 @@ if(BUILD_TESTING)
     COMMAND bench_dynamics_timing --urdf ${UR5E_TEST_URDF} --calls 1000
       --output ${CMAKE_CURRENT_BINARY_DIR}/dynamics_timing_smoke.csv)
 
+  ament_add_gtest(test_computed_torque test/test_computed_torque.cpp)
+  target_link_libraries(test_computed_torque ur5e_teaching_dynamics)
+  target_compile_definitions(test_computed_torque PRIVATE UR5E_TEST_URDF="${UR5E_TEST_URDF}")
+  add_dependencies(test_computed_torque ur5e_test_urdf)
+
   ament_add_gmock(test_load_controllers test/test_load_controllers.cpp)
   target_link_libraries(test_load_controllers
     ur5e_teaching_dynamics

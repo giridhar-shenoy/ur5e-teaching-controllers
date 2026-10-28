@@ -1,8 +1,12 @@
 // Copyright (c) 2026 Giridhar J Shenoy. MIT License.
 //
-// Joint-space trajectory tracking on the effort interface:
+// Joint-space trajectory tracking on the effort interface, with one of two control laws
+// (parameter control_law, switchable at runtime):
 //
-//   tau = Kp e + Kd e_dot + Ki integral(e) + tau_ff,   tau_ff = RNEA(q_des, qd_des, qdd_des)
+//   pid_ff:           tau = Kp e + Kd e_dot + Ki integral(e) + tau_ff,
+//                     tau_ff = RNEA(q_des, qd_des, qdd_des)   (feedforward: false -> tau_ff = 0)
+//   computed_torque:  tau = RNEA(q, qd, qdd_des + Kp' e + Kd' e_dot),
+//                     Kp' = w^2, Kd' = 2 zeta w per joint (ct_omega, ct_zeta)
 //
 // Input: trajectory_msgs/JointTrajectory on ~/joint_trajectory (topic only; no action server in
 // v0.1). Each segment is re-profiled as a velocity/acceleration-limited trapezoid; a new message
@@ -61,6 +65,12 @@ private:
     std::shared_ptr<const profiles::TrapezoidalTrajectory> trajectory;
   };
 
+  enum class Law
+  {
+    kPidFf,
+    kComputedTorque
+  };
+
   void on_trajectory(const trajectory_msgs::msg::JointTrajectory & msg);
   void apply_params();
 
@@ -85,6 +95,9 @@ private:
 
   std::vector<profiles::JointSample> samples_;
   Eigen::VectorXd q_des_, qd_des_, qdd_des_, tau_ff_;
+
+  Law law_{Law::kPidFf};
+  Eigen::VectorXd ct_omega_, ct_zeta_, ct_kp_, ct_kd_, a_cmd_;  // computed-torque outer loop
 };
 
 }  // namespace ur5e_teaching_controllers
