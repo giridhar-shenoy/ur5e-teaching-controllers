@@ -10,13 +10,13 @@ commit that adds this file. Session: 03:25–06:05 IST.
 
 | What | Commit(s) |
 |---|---|
-| Skeleton: license, Dockerfile, devcontainer, CI workflow, pre-commit | `616bc76` `53484a9` `0ca05be` `9e269d6` |
-| Bringup: xacro overlay (effort ifaces, wrist F/T sensor, Gazebo-only payload), bench worlds, `sim.launch.py` (fixes two stock-launch failures on Lyrical) | `2d6df0c`, gravity/payload/fallback `f2cf922`, damping `9c82a09` |
-| Headless smoke test in CI (+ mode-switch check) | `400fa48` `0237d35` `5409c9a` |
-| Controllers (a) PID + Pinocchio RNEA FF tracking, (b) gravity-comp hand guiding; Pinocchio wrapper; 41 gtest cases | `1aa8ff0`, review fixes `4d145ac`, deactivation fix `bd001f6` |
-| Mode manager, `mode.launch.py`, benchmark drivers, GIF recorder | `975ac5b` `7c938a6` `4e72685` `732c36e` `4c600e0` |
-| Results (all rows at clean commit `26e5920`), figures, GIFs, README, docs | `524b35b` `28eef56` |
-| Checkpoints 1–4 | `f2ff314` `b74708f` `c817789` `4906e4a` |
+| Skeleton: license, Dockerfile, devcontainer, CI workflow, pre-commit | `caa7416` `df00db9` `4daa9c9` `316b247` |
+| Bringup: xacro overlay (effort ifaces, wrist F/T sensor, Gazebo-only payload), bench worlds, `sim.launch.py` (fixes two stock-launch failures on Lyrical) | `afa1c67`, gravity/payload/fallback `9ae8132`, damping `7f89cd9` |
+| Headless smoke test in CI (+ mode-switch check) | `cd641e0` `a2ef023` `959ede2` |
+| Controllers (a) PID + Pinocchio RNEA FF tracking, (b) gravity-comp hand guiding; Pinocchio wrapper; 41 gtest cases | `f0fa401`, review fixes `b591dcc`, deactivation fix `6309d05` |
+| Mode manager, `mode.launch.py`, benchmark drivers, GIF recorder | `8eb85e5` `e05757d` `ef8986f` `d34ee91` `cb270ef` |
+| Results (all rows at clean commit `cd02385`), figures, GIFs, README, docs | `4d60334` `035288a` |
+| Checkpoints 1–4 | `c7e4a7d` `006a136` `b25e11c` `7f22327` |
 
 Full list: `git log --oneline` (all commits dated 2026-10-28).
 
@@ -37,7 +37,7 @@ the Docker image build (Docker is not installed on the laptop).
 ### Blocked — decisions you need to make
 
 1. **CI billing** (below, #1): fix the payment method / spending limit, or make the repo public.
-2. **Commit e-mail** (#2): all commits use `the old work e-mail` from the global git config.
+2. **Commit e-mail** (#2): resolved 28 Oct; every commit was rewritten to `giridharjshenoy@gmail.com`.
 3. **Facts only you can confirm** (#3): the RTDE/torque sentence in the README.
 4. **Branch protection / visibility** (#4): not touched.
 5. **SHOULD (TcpJogController)**: not started — the sprint rule allows it only once the MUST is
@@ -79,18 +79,15 @@ make a payload-model error safe).
 - **What it blocks**: the acceptance items "CI run on GitHub is green" (plumbing and feature).
   Meanwhile I run the same steps natively on the laptop (pre-commit, rosdep check, colcon build,
   colcon test, ci_smoke.sh) and paste their outputs in CHECKPOINTS.md. The Docker image build
-  itself cannot be verified locally (Docker is not installed).
+  itself cannot be verified locally (Docker is not ins### 2. Git author e-mail (resolved 28 Oct 2026)
 
-### 2. Git author e-mail on every commit is the old work address
+- At Giri's request the history was rewritten so every commit's author and committer is
+  `giridharjshenoy@gmail.com` (dates and messages unchanged), the old address was replaced
+  in the notes, quoted commit hashes were updated, and `main` was force-pushed. The global
+  git config now uses the personal address. Backup bundle:
+  `~/backups/git-email-rewrite-20261028/r1.bundle`.
 
-- **What**: the machine's global git config is `Giridhar J Shenoy <the old work e-mail>`, so
-  every commit in this repo carries that address. The repo is private for now.
-- **Why it needs you**: identity and history are yours to decide; changing it afterwards means
-  rewriting history, which I must not do.
-- **Recommendation**: if you want your personal address on public portfolio repos, set
-  `git config user.email` in this repo before the next commits; whether to rewrite the existing
-  ones before going public is your call (it is a force-push).
-- **Blocks**: nothing technically.
+nically.
 
 ### 3. Facts in the README / what_broke.md only you can confirm
 
