@@ -42,9 +42,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Host network and IPC, as in .devcontainer: with Docker's defaults (bridge network, 64 MB
+      # /dev/shm) Fast DDS discovery between the sim and the smoke test's CLI tools was flaky
+      # (a publisher that never matched the controller's subscription; one that matched but
+      # whose message never arrived).
       - name: Start container
         run: >-
-          docker run -d --name ci --user root -v ${{ github.workspace }}:/ws -w /ws
+          docker run -d --name ci --user root --network host --ipc host
+          -v ${{ github.workspace }}:/ws -w /ws
           -e ROS_DOMAIN_ID=11 -e GZ_PARTITION=r1 -e MAKEFLAGS=-j4
           --entrypoint sleep $IMAGE infinity
 
