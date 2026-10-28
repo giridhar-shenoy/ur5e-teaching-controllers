@@ -31,12 +31,14 @@ Every number on this page is computed by `scripts/make_results.py` from the CSVs
 
 ## Tracking — details
 
-`results/tracking.csv`: commit `c35e70c82023`, seed 1, physics step 0.001 s, controller update rate 500 Hz; 3 repetitions per condition.
+`results/tracking.csv`: commit `c35e70c82023`, seed 1, physics step 0.001 s, controller update rate 500 Hz, dynamics backend pinocchio; 3 repetitions per condition.
 
 Method: the arm is homed by the tracking controller itself (feedforward on) to a
 seeded random offset (≤ 0.05 rad per joint) from the home pose; for the PID-only
 variant feedforward is then switched off and the integrator given 3 s to carry
-gravity. A 3-waypoint path (2.5 s per segment at 1×) is sent on
+gravity; the computed-torque variant switches the same controller to
+`control_law: computed_torque` (ω, ζ per joint from `controllers.yaml`), with no
+integral term. A 3-waypoint path (2.5 s per segment at 1×) is sent on
 `~/joint_trajectory`. The error is the controller's own `q_des − q` at 500 Hz,
 from trajectory start to 0.5 s after the last
 reference motion. "Worst joint" = the joint with the largest RMSE in that run.
@@ -59,7 +61,7 @@ Per joint, RMSE / max |e| in mrad, mean ± std over repetitions:
 
 ## Hand guiding — details
 
-`results/handguide.csv`: commit `c35e70c82023`, seed 1, physics step 0.001 s, controller update rate 500 Hz; 3 repetitions per condition.
+`results/handguide.csv`: commit `c35e70c82023`, seed 1, physics step 0.001 s, controller update rate 500 Hz, dynamics backend pinocchio; 3 repetitions per condition.
 
 Method: per repetition the tracking controller holds the arm at a seeded random
 offset (≤ 0.05 rad per joint) from home until its integrator has converged (3 s);

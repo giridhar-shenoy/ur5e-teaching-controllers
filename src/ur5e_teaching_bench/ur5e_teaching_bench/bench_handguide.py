@@ -119,6 +119,7 @@ def main(argv=None) -> int:
     step = world_step_size()
     rate = node.get_param("controller_manager", "update_rate")
     node.switcher.ensure_configured(CONTROLLER)  # its parameter services exist only once loaded
+    backend = node.get_param(CONTROLLER, "dynamics_backend")
     model = robot_model(node)  # kinematics only; the payload does not change J
     expected_z = (args.actual_payload - args.model_payload) * G
 
@@ -145,6 +146,7 @@ def main(argv=None) -> int:
                     "git_commit": commit,
                     "sim_step_s": step,
                     "update_rate_hz": rate,
+                    "dynamics_backend": backend,
                     "seed": args.seed,
                     "rep": rep,
                     "model_payload_kg": args.model_payload,

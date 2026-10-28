@@ -1,7 +1,9 @@
 """bench_tracking: joint-space tracking error of PidFfTrajectoryController.
 
-Grid (v0.1): speed scale {0.5, 1.0, 2.0} x feedforward {off, on} x reps. One sim launch; the
-arm is re-homed (same controller, feedforward on) before every run. The reference is a fixed
+Grid: speed scale {0.5, 1.0, 2.0} x variant {pid, pid_ff, computed_torque} x reps, where pid is
+control_law pid_ff with feedforward off, pid_ff the same with RNEA feedforward on, and
+computed_torque the inverse-dynamics law. One sim launch; the arm is re-homed (same controller,
+PID + feedforward) before every run. The reference is a fixed
 three-segment, six-joint path around the home pose; each repetition shifts the whole path by a
 seeded random offset (|offset| <= 0.05 rad per joint) so repetitions sample nearby
 configurations instead of replaying an identical deterministic run.
@@ -31,6 +33,14 @@ from ur5e_teaching_bench.common import (
 )
 
 CONTROLLER = "pid_ff_trajectory_controller"
+# Parameters per variant, and how long to wait before the run: without feedforward the arm sags
+# until the integrator carries gravity, so PID-only starts from that steady state, as a PID-only
+# arm would be in practice (integral time 0.5 s).
+VARIANTS = {
+    "pid": ({"control_law": "pid_ff", "feedforward": False}, 3.0),
+    "pid_ff": ({"control_law": "pid_ff", "feedforward": True}, 0.3),
+    "computed_torque": ({"control_law": "computed_torque"}, 0.3),
+}
 # Offsets from HOME of the three waypoints; nominal (1.0x) time per segment.
 PATH_OFFSETS = np.array(
     [
@@ -44,14 +54,13 @@ SETTLE_S = 0.5
 
 
 def run_once(
-    node: BenchNode, speed: float, feedforward: bool, offset: np.ndarray, dump: str | None = None
+    node: BenchNode, speed: float, variant: str, offset: np.ndarray, dump: str | None = None
 ) -> dict:
     start = HOME + offset
-    node.home(start)  # same controller, feedforward on
-    node.set_params(CONTROLLER, {"feedforward": feedforward})
-    # Without feedforward the arm sags until the integrator carries gravity; start the run from
-    # that steady state, as a PID-only arm would be in practice (integral time 0.5 s).
-    node.sleep_sim(0.3 if feedforward else 3.0)
+    node.home(start)  # same controller, PID + feedforward
+    params, settle = VARIANTS[variant]
+    node.set_params(CONTROLLER, params)
+    node.sleep_sim(settle)
 
     waypoints = [start + p for p in PATH_OFFSETS]
     seg = NOMINAL_SEGMENT_S / speed
@@ -85,7 +94,9 @@ def main(argv=None) -> int:
     parser.add_argument("--reps", type=int, default=3)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--speeds", type=float, nargs="+", default=[0.5, 1.0, 2.0])
-    parser.add_argument("--ff", type=int, nargs="+", default=[0, 1], help="variants to run")
+    parser.add_argument(
+        "--variants", nargs="+", default=list(VARIANTS), choices=list(VARIANTS), help="laws to run"
+    )
     parser.add_argument("--dump-dir", help="save every raw recording as .npz here")
     args = parser.parse_args(argv)
 
@@ -97,16 +108,17 @@ def main(argv=None) -> int:
     step = world_step_size()
     rate = node.get_param("controller_manager", "update_rate")
     node.switcher.ensure_configured(CONTROLLER)  # its parameter services exist only once loaded
+    backend = node.get_param(CONTROLLER, "dynamics_backend")
 
     for rep in range(args.reps):
         offset = rng.uniform(-0.05, 0.05, size=6)
         for speed in args.speeds:
-            for ff in (bool(v) for v in args.ff):
+            for variant in args.variants:
                 dump = None
                 if args.dump_dir:
                     os.makedirs(args.dump_dir, exist_ok=True)
-                    dump = os.path.join(args.dump_dir, f"rep{rep}_speed{speed:g}_ff{int(ff)}.npz")
-                r = run_once(node, speed, ff, offset, dump)
+                    dump = os.path.join(args.dump_dir, f"rep{rep}_speed{speed:g}_{variant}.npz")
+                r = run_once(node, speed, variant, offset, dump)
                 rows = [
                     {
                         "bench": "tracking",
@@ -116,7 +128,8 @@ def main(argv=None) -> int:
                         "seed": args.seed,
                         "rep": rep,
                         "speed_scale": speed,
-                        "feedforward": int(ff),
+                        "variant": variant,
+                        "dynamics_backend": backend,
                         "joint": joint,
                         "rmse_rad": f"{r['rmse'][j]:.6e}",
                         "max_abs_err_rad": f"{r['max_abs'][j]:.6e}",
@@ -128,7 +141,7 @@ def main(argv=None) -> int:
                 ]
                 append_rows(args.out, rows)
                 node.get_logger().info(
-                    f"rep {rep} speed {speed} ff {int(ff)}: max RMSE "
+                    f"rep {rep} speed {speed} {variant}: max RMSE "
                     f"{r['rmse'].max():.2e} rad, max |e| {r['max_abs'].max():.2e} rad"
                 )
     node.home()
