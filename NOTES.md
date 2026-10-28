@@ -280,6 +280,45 @@ the first real CI run (40766406049) started at 20:47 UTC on 28 Oct.
 
 Step 0 took 22 min wall (02:18–02:40 IST); one fix. CI is green at `ca71285`.
 
+### KDL backend (MUST 1) — decisions and verified facts
+
+- Versions: `liborocos-kdl-dev` 1.5.2-1, `ros-lyrical-kdl-parser` 3.0.1, `ros-lyrical-urdf` 2.13.2
+  (`apt-cache policy`, all installed). CMake: `find_package(orocos_kdl_vendor)` provides the
+  imported target `orocos-kdl`; `kdl_parser::kdl_parser`, `urdf::urdf`.
+- The brief says "the existing dynamics wrapper interface (the one pinocchio_model implements)";
+  v0.1 had a concrete `PinocchioModel` class and no interface, so I extracted
+  `dynamics::DynamicsModel` from its public API (same method names and semantics) and made
+  `PinocchioModel` implement it. Pinocchio maths unchanged; its gravity is now set from
+  `gravity_z` (default -9.81, the same double as Pinocchio's built-in `gravity981`).
+- KDL frame conventions, checked by the equivalence test rather than assumed:
+  - chain `base_link -> tool0` (`tree.getChain`); `base_link` hangs off the URDF root `world`
+    through a fixed joint, so the wrapper composes root→base_link and rotates gravity into
+    base_link and the Jacobian and tip pose out of it. With the shipped URDF that rotation is
+    the identity; the code handles a rotated mount anyway.
+  - `ChainJntToJacSolver`: reference point at the chain tip, base orientation = Pinocchio's
+    `LOCAL_WORLD_ALIGNED`; rows [linear; angular] in both.
+  - `RigidBodyInertia(m, c, Ic)` takes the rotational inertia **about the CoM**; a segment's
+    inertia is expressed in its tip frame, so the payload is added to the last segment (tool0)
+    with its CoM in tool0 coordinates. Pinocchio adds it to the wrist_3 joint body through the
+    frame placement. Same physics.
+  - KDL solvers keep a `const Chain&`: copying a `KdlModel` has to rebuild its solvers on the new
+    chain (custom copy constructor), and `set_payload()` rebuilds them after `setInertia`.
+  - kdl_parser does not carry joint limits; they come from `urdf::Model` (same URDF fields
+    Pinocchio reads); the test asserts the limit vectors are identical.
+- `test_dynamics_equivalence` result (first build, nothing to fix; 200 states, seed 20261029,
+  q in the URDF limits, qd in the URDF velocity limits, |qdd| ≤ 10 rad/s²):
+
+  | Case | gravity (N m) | RNEA (N m) | C·qd+g (N m) | M | J | tip p (m) |
+  |---|---|---|---|---|---|---|
+  | payload 0 kg | 2.1e-14 | 2.1e-14 | 2.1e-14 | 3.6e-15 | 3.3e-16 | 2.2e-16 |
+  | payload 1 kg, CoM (0, 0, 0.03) | 2.1e-14 | 4.3e-14 | 2.8e-14 | 4.4e-15 | 3.3e-16 | 2.2e-16 |
+  | 1 kg off-axis CoM on the rotated ft_frame | 1.4e-14 | 2.8e-14 | 2.8e-14 | 3.6e-15 | 3.3e-16 | 2.2e-16 |
+  | gravity_z = -9.8 | 1.4e-14 | 2.8e-14 | 2.8e-14 | 3.6e-15 | 3.3e-16 | 2.2e-16 |
+
+  (max |Pinocchio − KDL| over all samples and joints; tolerances 1e-6 / 1e-6 / 1e-9 as briefed.)
+  Both are exact O(n) recursions in double precision on the same inertias, so agreement at
+  rounding level is what to expect; a convention bug would show up at 1e-2 to 1e+1.
+
 ## CHANGELOG entry for this session
 
 See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,

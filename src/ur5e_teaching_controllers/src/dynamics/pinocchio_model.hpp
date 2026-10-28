@@ -1,91 +1,72 @@
 // Copyright (c) 2026 Giridhar J Shenoy. MIT License.
 //
-// Thin wrapper around Pinocchio for the controllers: build the model from the robot_description
-// URDF (no hard-coded UR5e numbers anywhere), map the controller's joint order onto Pinocchio's,
-// and expose gravity, RNEA, non-linear effects, the mass matrix, frame Jacobians and a payload
-// that can be changed at runtime.
+// DynamicsModel backend on Pinocchio (the default): build the model from the robot_description
+// URDF, map the controller's joint order onto Pinocchio's, and expose gravity, RNEA, non-linear
+// effects, the mass matrix, frame Jacobians and a payload added to the tip body's inertia.
 //
 // All query methods are allocation-free after construction (they write into pre-sized members),
 // so they can be called from the controller's realtime update().
 #pragma once
 
 #include <Eigen/Core>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <pinocchio/multibody.hpp>
 #include <pinocchio/spatial.hpp>
 
+#include "dynamics/dynamics_model.hpp"
+
 namespace ur5e_teaching_controllers::dynamics
 {
 
-class PinocchioModel
+class PinocchioModel final : public DynamicsModel
 {
 public:
-  using Vector = Eigen::VectorXd;
-  using Matrix6x = Eigen::Matrix<double, 6, Eigen::Dynamic>;
-
-  /// Edge length of the solid cube used for the payload's rotational inertia. The xacro uses the
-  /// same cube for the simulated payload, so model and simulation agree when the masses agree.
-  static constexpr double kPayloadCubeSide = 0.06;
-
   /// @param urdf        robot_description XML
   /// @param joint_names controller joint order; every name must be a 1-DoF joint in the URDF and
   ///                    together they must be all of the model's DoFs
   /// @param tip_frame   frame the payload is attached to and Jacobians refer to (e.g. "tool0")
+  /// @param gravity_z   z component of gravity in the URDF root frame [m/s^2]
   /// @throws std::runtime_error on a malformed URDF, unknown joint/frame or DoF mismatch
   PinocchioModel(
     const std::string & urdf, const std::vector<std::string> & joint_names,
-    const std::string & tip_frame);
+    const std::string & tip_frame, double gravity_z = kDefaultGravityZ);
 
-  std::size_t dof() const { return joint_names_.size(); }
+  std::unique_ptr<DynamicsModel> clone() const override;
+  const char * backend() const override { return "pinocchio"; }
 
-  /// Replace the payload: `mass` [kg] with its centre of mass at `com_in_tip` [m] expressed in the
-  /// tip frame, rotational inertia of a solid cube of side kPayloadCubeSide. mass = 0 removes it.
-  void set_payload(double mass, const Eigen::Vector3d & com_in_tip);
-  double payload_mass() const { return payload_mass_; }
+  /// In-place and allocation-free here, but the controllers still call it on a clone (KDL's is
+  /// not), so both backends take the same path.
+  void set_payload(double mass, const Eigen::Vector3d & com_in_tip) override;
 
-  /// g(q): generalised gravity torque [N m], controller joint order.
-  const Vector & gravity(const Vector & q);
-  /// RNEA: M(q) a + C(q, v) v + g(q).
-  const Vector & rnea(const Vector & q, const Vector & v, const Vector & a);
-  /// C(q, v) v + g(q).
-  const Vector & nonlinear_effects(const Vector & q, const Vector & v);
-  /// Joint-space mass matrix M(q) (symmetric, full).
-  const Eigen::MatrixXd & mass_matrix(const Vector & q);
-  /// 6xN Jacobian of the tip frame, rows [linear; angular], expressed in a frame with the tip's
-  /// origin and the base (world) orientation (Pinocchio LOCAL_WORLD_ALIGNED).
-  const Matrix6x & tip_jacobian(const Vector & q);
-  /// Tip position in the base frame.
-  Eigen::Vector3d tip_position(const Vector & q);
-  /// Tip orientation in the base frame.
-  Eigen::Matrix3d tip_rotation(const Vector & q);
-
-  /// Limits read from the URDF, controller joint order.
-  const Vector & effort_limits() const { return effort_limit_; }
-  const Vector & velocity_limits() const { return velocity_limit_; }
-  const Vector & lower_limits() const { return lower_limit_; }
-  const Vector & upper_limits() const { return upper_limit_; }
+  const Vector & gravity(const Vector & q) override;
+  const Vector & rnea(const Vector & q, const Vector & v, const Vector & a) override;
+  const Vector & nonlinear_effects(const Vector & q, const Vector & v) override;
+  const Eigen::MatrixXd & mass_matrix(const Vector & q) override;
+  const Matrix6x & tip_jacobian(const Vector & q) override;
+  Eigen::Vector3d tip_position(const Vector & q) override;
+  Eigen::Matrix3d tip_rotation(const Vector & q) override;
 
 private:
   void to_pinocchio(const Vector & in, Eigen::VectorXd & out) const;
   void from_pinocchio(const Eigen::VectorXd & in, Vector & out) const;
 
+  PinocchioModel(const PinocchioModel &) = default;
+
   pinocchio::Model model_;
   pinocchio::Data data_;
-  std::vector<std::string> joint_names_;
   std::vector<int> idx_;  // controller joint j -> Pinocchio q/v index
 
   pinocchio::FrameIndex tip_frame_id_{0};
   pinocchio::JointIndex tip_joint_id_{0};
   pinocchio::Inertia tip_body_inertia_without_payload_;
-  double payload_mass_{0.0};
 
   Eigen::VectorXd q_, v_, a_;  // Pinocchio order scratch
   Vector tau_;                 // controller order output
   Eigen::MatrixXd mass_;
   Matrix6x jacobian_pin_, jacobian_;
-  Vector effort_limit_, velocity_limit_, lower_limit_, upper_limit_;
 };
 
 }  // namespace ur5e_teaching_controllers::dynamics
