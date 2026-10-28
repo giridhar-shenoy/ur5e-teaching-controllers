@@ -48,6 +48,10 @@ target_include_directories(ur5e_teaching_dynamics PUBLIC
 target_link_libraries(ur5e_teaching_dynamics PUBLIC
   pinocchio::pinocchio Eigen3::Eigen orocos-kdl kdl_parser::kdl_parser urdf::urdf)
 
+# Per-call timing of gravity() and rnea() on both backends (scripts/bench_dynamics_timing.sh).
+add_executable(bench_dynamics_timing src/bench/bench_dynamics_timing.cpp)
+target_link_libraries(bench_dynamics_timing ur5e_teaching_dynamics)
+
 add_library(${PROJECT_NAME} SHARED
   src/effort_controller_base.cpp
   src/pid_ff_trajectory_controller.cpp
@@ -80,6 +84,7 @@ install(
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)
+install(TARGETS bench_dynamics_timing RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -121,6 +126,12 @@ if(BUILD_TESTING)
   target_link_libraries(test_dynamics_equivalence ur5e_teaching_dynamics)
   target_compile_definitions(test_dynamics_equivalence PRIVATE UR5E_TEST_URDF="${UR5E_TEST_URDF}")
   add_dependencies(test_dynamics_equivalence ur5e_test_urdf)
+
+  # CI smoke of the timing executable: 1 000 calls, output discarded (runner timings are not
+  # published numbers; results/dynamics_timing.csv comes from scripts/bench_dynamics_timing.sh).
+  add_test(NAME bench_dynamics_timing_smoke
+    COMMAND bench_dynamics_timing --urdf ${UR5E_TEST_URDF} --calls 1000
+      --output ${CMAKE_CURRENT_BINARY_DIR}/dynamics_timing_smoke.csv)
 
   ament_add_gmock(test_load_controllers test/test_load_controllers.cpp)
   target_link_libraries(test_load_controllers
