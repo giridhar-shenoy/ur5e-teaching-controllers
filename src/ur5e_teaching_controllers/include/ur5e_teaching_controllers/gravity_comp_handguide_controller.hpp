@@ -4,8 +4,9 @@
 //
 //   tau = g(q) [+ C(q, qd) qd] - D qd + tau_friction(qd) + tau_limits(q)
 //
-// g and C come from Pinocchio with the configured model payload (payload_mass, payload_com),
-// which can be changed at runtime and is pushed into the payload body's inertia. The arm floats
+// g and C come from the dynamics backend (dynamics_backend: pinocchio | kdl) with the configured
+// model payload (payload_mass, payload_com), which can be changed at runtime: a model with the
+// new payload is built outside the realtime loop and swapped in. The arm floats
 // and a person (in simulation: an ApplyLinkWrench push on the wrist) moves it. Safety: a spring
 // pushes joints back near their URDF position limits, and the controller deactivates itself with
 // an error if any |qd| exceeds max_joint_velocity (configure a fallback_controllers entry so the
@@ -43,8 +44,6 @@ public:
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
-  void apply_params();
-
   std::shared_ptr<gravity_comp_handguide_controller::ParamListener> param_listener_;
   std::unique_ptr<gravity_comp_handguide_controller::Params> params_;
   std::unique_ptr<gravity_comp_handguide_controller::Params> staged_;  // runtime changes land here

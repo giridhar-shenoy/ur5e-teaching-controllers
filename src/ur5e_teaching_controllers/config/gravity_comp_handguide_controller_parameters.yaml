@@ -12,10 +12,22 @@ gravity_comp_handguide_controller:
     default_value: "tool0"
     description: "Frame the model payload is attached to."
     read_only: true
+  dynamics_backend:
+    type: string
+    default_value: "pinocchio"
+    description: "Rigid-body dynamics library: pinocchio (default) or kdl (orocos KDL), both from robot_description."
+    read_only: true
+    validation:
+      one_of<>: [["pinocchio", "kdl"]]
+  gravity_z:
+    type: double
+    default_value: -9.81
+    description: "Gravity along the URDF root z axis [m/s^2]; must match the world's gravity (SDF default: -9.8)."
+    read_only: true
   payload_mass:
     type: double
     default_value: 0.0
-    description: "Model payload mass [kg]; can be changed while the controller runs."
+    description: "Model payload mass [kg]; can change while running (model rebuilt outside the realtime loop)."
     validation:
       gt_eq<>: [0.0]
   payload_com:

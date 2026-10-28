@@ -3,6 +3,7 @@
     ros2 launch ur5e_teaching_bringup sim.launch.py                    # headless, mode none
     ros2 launch ur5e_teaching_bringup sim.launch.py mode:=track        # + switch to a mode
     ros2 launch ur5e_teaching_bringup sim.launch.py payload_mass:=2.0  # actual payload in Gazebo
+    ros2 launch ur5e_teaching_bringup sim.launch.py dynamics_backend:=kdl  # KDL dynamics
 
 Why this is not a thin wrapper around ur_simulation_gz/ur_sim_control.launch.py (as first
 planned): on Lyrical that launch (2.5.0) fails in two ways that cannot be fixed through its
@@ -38,10 +39,15 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
 WORLD_NAME = "bench"
+# The effort controllers that take a dynamics_backend parameter.
+DYNAMICS_CONTROLLERS = ("pid_ff_trajectory_controller", "gravity_comp_handguide_controller")
 
 
-def _controllers_with_params_file(src: str) -> str:
-    """Copy the controllers YAML and point each controller at it (ros2_control 6.10.1 quirk)."""
+def _controllers_with_params_file(src: str, dynamics_backend: str) -> str:
+    """Copy the controllers YAML and point each controller at it (ros2_control 6.10.1 quirk).
+
+    The copy also carries the dynamics_backend launch argument into both effort controllers.
+    """
     with open(src) as f:
         data = yaml.safe_load(f)
     out_dir = tempfile.mkdtemp(prefix="ur5e_teaching_")
@@ -49,6 +55,8 @@ def _controllers_with_params_file(src: str) -> str:
     for value in data["controller_manager"]["ros__parameters"].values():
         if isinstance(value, dict) and "type" in value:
             value["params_file"] = dst
+    for name in DYNAMICS_CONTROLLERS:
+        data[name]["ros__parameters"]["dynamics_backend"] = dynamics_backend
     with open(dst, "w") as f:
         yaml.safe_dump(data, f, sort_keys=False)
     return dst
@@ -63,7 +71,8 @@ def launch_setup(context, *args, **kwargs):
     world = arg("world")
     world_path = world if os.path.isabs(world) else os.path.join(pkg, "worlds", world)
     controllers_file = _controllers_with_params_file(
-        arg("controllers_file") or os.path.join(pkg, "config", "controllers.yaml")
+        arg("controllers_file") or os.path.join(pkg, "config", "controllers.yaml"),
+        arg("dynamics_backend"),
     )
     description_file = arg("description_file") or os.path.join(
         pkg, "urdf", "ur5e_teaching.urdf.xacro"
@@ -200,6 +209,12 @@ def generate_launch_description():
         DeclareLaunchArgument("payload_com_z", default_value="0.03"),
         DeclareLaunchArgument(
             "initial_joint_controller", default_value="joint_trajectory_controller"
+        ),
+        DeclareLaunchArgument(
+            "dynamics_backend",
+            default_value="pinocchio",
+            choices=["pinocchio", "kdl"],
+            description="Dynamics library of both effort controllers (v0.1 numbers: pinocchio).",
         ),
         DeclareLaunchArgument(
             "mode",

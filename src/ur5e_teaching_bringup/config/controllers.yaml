@@ -75,6 +75,8 @@ pid_ff_trajectory_controller:
       - wrist_2_joint
       - wrist_3_joint
     tip_frame: tool0
+    dynamics_backend: pinocchio  # or kdl; sim.launch.py dynamics_backend:=... overrides this
+    gravity_z: -9.81  # must equal <gravity> in worlds/*.sdf (test_gravity_consistency.py)
     kp: [600.0, 1200.0, 500.0, 30.0, 8.0, 0.5]
     kd: [50.0, 100.0, 40.0, 1.5, 0.3, 0.02]
     ki: [1200.0, 2400.0, 1000.0, 60.0, 16.0, 1.0]
@@ -96,6 +98,8 @@ gravity_comp_handguide_controller:
       - wrist_2_joint
       - wrist_3_joint
     tip_frame: tool0
+    dynamics_backend: pinocchio
+    gravity_z: -9.81
     payload_mass: 0.0
     payload_com: [0.0, 0.0, 0.03]
     coriolis_compensation: true

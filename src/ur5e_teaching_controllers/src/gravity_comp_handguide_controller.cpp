@@ -4,7 +4,7 @@
 #include <cmath>
 
 #include "control/control_laws.hpp"
-#include "dynamics/pinocchio_model.hpp"
+#include "dynamics/dynamics_model.hpp"
 #include "ur5e_teaching_controllers/gravity_comp_handguide_controller_parameters.hpp"
 
 namespace ur5e_teaching_controllers
@@ -63,27 +63,28 @@ CallbackReturn GravityCompHandGuidingController::on_configure(const rclcpp_lifec
     return CallbackReturn::ERROR;
   }
   staged_ = std::make_unique<gravity_comp_handguide_controller::Params>(*params_);
-  if (!configure_common(params_->joints, params_->tip_frame, params_->state_publish_decimation)) {
+  if (!configure_common(
+        params_->joints, params_->tip_frame, params_->dynamics_backend, params_->gravity_z,
+        params_->payload_mass, params_->payload_com, params_->state_publish_decimation)) {
     return CallbackReturn::ERROR;
   }
+  // Runtime payload changes: the model is rebuilt here, in the parameter service's thread, and
+  // update() only swaps it in (see EffortControllerBase::request_payload).
+  param_listener_->setUserCallback([this](const gravity_comp_handguide_controller::Params & p) {
+    request_payload(p.payload_mass, p.payload_com);
+  });
   qd_vec_.assign(n, 0.0);
   tau_model_ = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(n));
-  apply_params();
   RCLCPP_INFO(
-    get_node()->get_logger(), "configured: %zu joints, model payload %.2f kg, coriolis %s", n,
-    params_->payload_mass, params_->coriolis_compensation ? "on" : "off");
+    get_node()->get_logger(),
+    "configured: %zu joints, model payload %.2f kg, coriolis %s, %s dynamics", n,
+    params_->payload_mass, params_->coriolis_compensation ? "on" : "off", model_->backend());
   return CallbackReturn::SUCCESS;
-}
-
-void GravityCompHandGuidingController::apply_params()
-{
-  model_->set_payload(
-    params_->payload_mass,
-    Eigen::Vector3d(params_->payload_com[0], params_->payload_com[1], params_->payload_com[2]));
 }
 
 CallbackReturn GravityCompHandGuidingController::on_activate(const rclcpp_lifecycle::State &)
 {
+  adopt_pending_model();
   if (!read_state()) {
     RCLCPP_ERROR(get_node()->get_logger(), "cannot read joint state on activation");
     return CallbackReturn::ERROR;
@@ -104,20 +105,20 @@ return_type GravityCompHandGuidingController::update(
   if (param_listener_->try_update_params(*staged_)) {
     if (per_joint_sizes_ok(*staged_)) {
       *params_ = *staged_;  // same-size vectors: copy-assignment does not allocate
-      apply_params();       // runtime payload change -> payload body inertia in the model
     } else {
       RCLCPP_ERROR(
         get_node()->get_logger(), "parameter change rejected: per-joint array size != %zu",
         joints_.size());
     }
   }
+  adopt_pending_model();  // a runtime payload change arrives as a rebuilt model
   read_state();
 
   tau_model_ =
     params_->coriolis_compensation ? model_->nonlinear_effects(q_, qd_) : model_->gravity(q_);
 
-  const auto & lower = model_->lower_limits();
-  const auto & upper = model_->upper_limits();
+  const auto & lower = lower_limit_;
+  const auto & upper = upper_limit_;
   for (std::size_t j = 0; j < joints_.size(); ++j) {
     const auto e = static_cast<Eigen::Index>(j);
     const double v = qd_[e];
