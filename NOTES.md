@@ -215,6 +215,22 @@ Note on THIRD_PARTY: `sim.launch.py` follows the structure of ur_simulation_gz's
 `ur_sim_control.launch.py` (same nodes in the same roles) but is written fresh; no lines were
 copied, so it has no THIRD_PARTY entry. If you prefer to credit it anyway, add a row.
 
+## 2026-10-28 midday — results re-stamped after the history rewrite
+
+The history was rewritten to change the commit e-mail, so `scripts/regenerate_all.sh` was re-run
+to stamp the results with a commit that exists. Three full runs of the tracking benchmark, RNEA-FF
+worst-joint RMSE at 1× (mean ± std over 3 reps):
+
+| Run | Machine load | FF RMSE (mrad) | FF max error (mrad) | PID-only RMSE (mrad) |
+|---|---|---|---|---|
+| overnight final | alone | 0.05 ± 0.02 | 0.87 ± 0.16 | 8.83 ± 0.01 |
+| midday run 1 | R3 benchmark running at the same time | 0.13 ± 0.04 | 1.80 ± 1.38 | 8.82 ± 0.01 |
+| midday run 2 (committed) | alone, 437 s wall | 0.04 ± 0.03 | 1.22 ± 0.47 | 8.83 ± 0.01 |
+
+Hand-guiding rows were unchanged within their std in all three. The feedforward result degrades
+about 3× under CPU contention (likely late controller cycles against wall-clock-timed inputs);
+worth a line in the README's "Where it fails" and a check of the controller's cycle timing.
+
 ## CHANGELOG entry for this session
 
 See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,
