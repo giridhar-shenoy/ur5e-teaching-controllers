@@ -319,6 +319,43 @@ Step 0 took 22 min wall (02:18–02:40 IST); one fix. CI is green at `ca71285`.
   Both are exact O(n) recursions in double precision on the same inertias, so agreement at
   rounding level is what to expect; a convention bug would show up at 1e-2 to 1e+1.
 
+### bench_dynamics_timing (MUST 3) — runs
+
+- 02:54 published run (`results/dynamics_timing.csv`, commit `96365efa478c`, RelWithDebInfo,
+  i5-1135G7): taken under heavy → build → gazebo locks; `scripts/lib/heavy_processes.sh` found
+  nothing; load average at start 5.69 (other sessions' claude agents, VS Code's cpptools at 38 %
+  of one thread, a browser at ~26 %). 1 s wall for 4 × 100 000 timed calls.
+- Two extra runs right after, same commit, same locks, to see the spread (not published,
+  `/tmp/r1_timing_rerun{2,3}.csv`). Median / p95 in µs:
+
+  | Call | published run | rerun 2 | rerun 3 |
+  |---|---|---|---|
+  | clock (two reads) | 0.016 / 0.017 | 0.016 / 0.018 | 0.015 / 0.016 |
+  | Pinocchio g(q) | 0.538 / 0.740 | 0.508 / 0.580 | 0.511 / 0.684 |
+  | Pinocchio RNEA | 0.887 / 1.123 | 0.794 / 1.004 | 0.798 / 1.165 |
+  | KDL g(q) | 1.678 / 1.748 | 1.479 / 2.085 | 1.524 / 1.627 |
+  | KDL RNEA | 1.702 / 2.155 | 1.483 / 1.725 | 1.551 / 2.112 |
+
+  Medians move by up to ~12 % between runs and p95 more; the ordering (Pinocchio g < Pinocchio
+  RNEA < KDL g ≈ KDL RNEA) and "worst p95 ≤ 0.11 % of 2 ms" hold in all three. The max per row
+  (5–142 µs) is scheduler/interrupt noise on a non-RT kernel, not the libraries.
+- Why Pinocchio is faster (reasoning, not measured separately): its `computeGeneralizedGravity`
+  is a dedicated pass and RNEA is header-only template code compiled into our wrapper at -O2
+  with fixed-size spatial algebra; KDL's `JntToGravity` runs the full RNE with zero q̇/q̈ through
+  its precompiled library, and the wrapper copies into `KDL::JntArray`s.
+- The functional check before the bench existed (2 000 calls on the test URDF at 02:50, while
+  R2 compiled) gave ~1.5 µs for every call and 52 ns for the clock: CPU contention and
+  frequency state dominate at that size, which is why the guard exists.
+
+### Time log (session 2)
+
+- 02:18 start; 02:40 CHECKPOINT 1 (CI green at `ca71285`).
+- 02:42 overnight mode (Giri asleep): branch protection was not approved → MORNING.md.
+- 02:44 KDL backend + controller wiring committed (`af0002b`, `adfd712`); 67/67 tests.
+- 02:54 timing run (1 s wall); 03:00–03:06 smoke on both backends in Gazebo (gazebo lock,
+  41–89 s each; a slow 63 s bringup once while R2 compiled).
+- 03:08 CHECKPOINT 2.
+
 ## CHANGELOG entry for this session
 
 See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,
