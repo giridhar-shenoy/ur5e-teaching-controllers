@@ -153,9 +153,9 @@ code. Fixed by stopping the executor before reading/destroying the captures.
 
 ```text
 $ ros2 control list_hardware_interfaces | grep tcp_fts
-	tcp_fts_sensor/force.x
-	tcp_fts_sensor/force.y
-	... (force.z, torque.x/y/z)
+        tcp_fts_sensor/force.x
+        tcp_fts_sensor/force.y
+        ... (force.z, torque.x/y/z)
 $ ros2 topic echo --once /force_torque_sensor_broadcaster/wrench
 header: {stamp: {sec: 13, nanosec: 327000000}, frame_id: wrist_3_link}
 wrench: {force: {x: 0.00285, y: -0.00285, ...}}
