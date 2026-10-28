@@ -293,3 +293,100 @@ billing (MORNING #1).
 ### Does 1 Nov hold?
 
 Yes, apart from CI (needs the billing fix).
+
+## CHECKPOINT 4 — final (2026-10-28 06:00 IST)
+
+Wall-clock spent: 2 h 35 min (03:25–06:00 IST). HEAD before this report: `28eef56`.
+
+### git status
+
+```text
+$ git status --short
+ M CHECKPOINTS.md      (this report)
+$ git log --format="%ad" --date=short | sort -u
+2026-10-28
+$ git log --oneline | wc -l
+28
+```
+
+### MUST list (SPRINT OVERRIDE) — status with evidence
+
+- [x] **Plumbing; stock sim boots headless; ci_smoke.sh** — skeleton, Dockerfile, devcontainer,
+  CI, pre-commit. Stock `ur_sim_control.launch.py` fails on Lyrical (documented); our
+  `sim.launch.py` boots headless and `ci_smoke.sh` passes locally:
+
+  ```text
+  [smoke] controllers active after 10 s
+  [smoke] max joint displacement: 1.570 rad (threshold 0.2 rad)
+  [smoke] mode track: active = force_torque_sensor_broadcaster joint_state_broadcaster pid_ff_trajectory_controller
+  [smoke] mode handguide: active = force_torque_sensor_broadcaster gravity_comp_handguide_controller joint_state_broadcaster
+  [smoke] PASS in 23 s
+  ```
+
+- [x] **xacro overlay + bench.sdf** — effort/velocity/position interfaces, wrist F/T as a
+  ros2_control `<sensor>` (no bridge fallback needed: six `tcp_fts_sensor/*` state interfaces
+  listed), Gazebo-only payload link (`payload_mass`), ApplyLinkWrench bridged from ROS.
+- [x] **Controller (a) PidFfTrajectoryController** — PID + anti-windup + Pinocchio RNEA
+  feedforward, trapezoidal profiles, topic input only.
+- [x] **Controller (b) GravityCompHandGuidingController** — runtime `payload_mass`/`payload_com`,
+  viscous damping, joint-limit repulsion, speed cap (+ fallback to tracking, verified).
+- [x] **Mode manager + mode.launch.py (track, handguide)**, and `sim.launch.py mode:=track`:
+
+  ```text
+  $ ros2 launch ur5e_teaching_bringup sim.launch.py gazebo_gui:=false launch_rviz:=false mode:=track
+  [check] pid_ff_trajectory_controller active after 11 s
+  [check] after:  array('d', [1.1999999972467708, -1.1999999984036531, 0.500000003757626, -1.1999999954038774, -1.1999999940462274, 0.5000000037083117])
+  [check] total 22 s
+  ```
+
+- [x] **bench_tracking** — 3 speeds × FF on/off × 3 reps; per-joint RMSE and max |e|, mean ± std.
+- [x] **bench_handguide** — model 1.0 kg vs actual 0 / 1 / 2 kg × 3 reps; drift at zero push and
+  effort to hold vs payload error.
+- [x] **GIFs via scripts/record_gifs.sh (≤ 3 MB)** — headless rendering worked (SHARED.md), no
+  RViz/xvfb fallback needed:
+
+  ```text
+  $ ls -l docs/assets/*.gif
+  1055472 docs/assets/hero.gif
+  410597 docs/assets/mode_handguide.gif
+  719647 docs/assets/mode_track.gif
+  ```
+
+- [x] **README, docs/results.md, docs/architecture.md (Mermaid), docs/what_broke.md (DRAFT,
+  547 words, no invented numbers)** — `docs/controllers.md` too.
+- [x] **colcon build + colcon test (≥ 12 gtest cases)** — locally:
+
+  ```text
+  $ colcon test && colcon test-result
+  Summary: 45 tests, 0 errors, 0 failures, 0 skipped
+  test_trapezoidal: tests="11" failures="0"
+  test_control_laws: tests="11" failures="0"
+  test_pinocchio_model: tests="12" failures="0"
+  test_load_controllers: tests="7" failures="0"      # 41 gtest cases
+  $ python3 scripts/make_results.py --check
+  results up to date
+  $ .venv/bin/pre-commit run --all-files            # all hooks Passed
+  ```
+
+- [ ] **CI green on GitHub** — BLOCKED: the account's Actions billing/spending limit stops every
+  job before it starts (MORNING.md #1). The Docker image build is therefore also unverified
+  (no Docker on this laptop).
+
+### Other acceptance lines
+
+- `scripts/regenerate_all.sh` end to end: 489 s, 438 s and 436 s wall in three full runs
+  (< 60 min). Final run at clean commit 26e5920; every CSV row carries that hash and seed 1.
+- No hard-coded UR5e dynamics: `grep -rnE "8\.058|3\.761|0\.425|0\.392|2\.846" src
+  --include=*.cpp --include=*.hpp | wc -l` → 0; all from robot_description via Pinocchio.
+- THIRD_PARTY.md: `.clang-format` only; no third-party code was copied.
+
+### What is left on the MUST list
+
+Only "CI green", which needs Giri (billing). SHOULD (TcpJogController) not started — see
+NOTES.md open question 6.
+
+### Does 1 Nov hold?
+
+Yes. Everything on the MUST list is done and verified locally; CI turns green as soon as the
+billing issue is fixed, unless the image build or a container-only difference fails, which
+nobody can see before then.
