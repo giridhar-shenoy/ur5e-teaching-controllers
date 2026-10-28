@@ -93,7 +93,7 @@ CallbackReturn GravityCompHandGuidingController::on_activate(const rclcpp_lifecy
 
 CallbackReturn GravityCompHandGuidingController::on_deactivate(const rclcpp_lifecycle::State &)
 {
-  write_zero_effort();
+  // Leave the last torque on the interface (see PidFfTrajectoryController::on_deactivate).
   return CallbackReturn::SUCCESS;
 }
 
@@ -142,7 +142,9 @@ return_type GravityCompHandGuidingController::update(
       joints_[static_cast<std::size_t>(violating)].c_str(),
       std::abs(qd_vec_[static_cast<std::size_t>(violating)]),
       params_->max_joint_velocity[static_cast<std::size_t>(violating)]);
-    write_zero_effort();
+    // Keep compensating gravity and damping the motion until the fallback controller takes
+    // over; zero torque here would let the arm fall for at least one cycle.
+    write_effort();
     return return_type::ERROR;
   }
 

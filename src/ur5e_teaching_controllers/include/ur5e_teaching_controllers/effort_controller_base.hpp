@@ -41,8 +41,6 @@ protected:
   bool read_state();
   /// Write tau_ to the effort interfaces. Returns false if any write failed.
   bool write_effort();
-  /// Write zero effort (used on deactivate).
-  void write_zero_effort();
   /// Publish msg_ every publish_decimation_ calls; fill msg_ before calling.
   void publish_state(const rclcpp::Time & time);
 

@@ -189,7 +189,8 @@ CallbackReturn PidFfTrajectoryController::on_activate(const rclcpp_lifecycle::St
 
 CallbackReturn PidFfTrajectoryController::on_deactivate(const rclcpp_lifecycle::State &)
 {
-  write_zero_effort();
+  // The last torque stays on the interface until the next controller writes: zeroing it here
+  // dropped the arm under gravity for one cycle at every hand-over between effort controllers.
   active_.reset();
   return CallbackReturn::SUCCESS;
 }
