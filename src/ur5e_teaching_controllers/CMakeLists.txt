@@ -13,12 +13,15 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   controller_interface
   generate_parameter_library
   hardware_interface
+  kdl_parser
+  orocos_kdl_vendor
   pinocchio
   pluginlib
   rclcpp
   rclcpp_lifecycle
   realtime_tools
   trajectory_msgs
+  urdf
 )
 
 find_package(ament_cmake REQUIRED)
@@ -26,18 +29,24 @@ foreach(dep IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
   find_package(${dep} REQUIRED)
 endforeach()
 find_package(Eigen3 REQUIRED)
+find_package(orocos_kdl REQUIRED)
 
 generate_parameter_library(pid_ff_trajectory_controller_parameters
   config/pid_ff_trajectory_controller_parameters.yaml)
 generate_parameter_library(gravity_comp_handguide_controller_parameters
   config/gravity_comp_handguide_controller_parameters.yaml)
 
-# Dynamics wrapper: plain library (no ROS), unit-tested on its own.
-add_library(ur5e_teaching_dynamics SHARED src/dynamics/pinocchio_model.cpp)
+# Dynamics wrapper: one interface, two backends (Pinocchio, orocos KDL). No ROS graph; unit-tested
+# and benchmarked on its own.
+add_library(ur5e_teaching_dynamics SHARED
+  src/dynamics/dynamics_model.cpp
+  src/dynamics/kdl_model.cpp
+  src/dynamics/pinocchio_model.cpp)
 target_include_directories(ur5e_teaching_dynamics PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
-target_link_libraries(ur5e_teaching_dynamics PUBLIC pinocchio::pinocchio Eigen3::Eigen)
+target_link_libraries(ur5e_teaching_dynamics PUBLIC
+  pinocchio::pinocchio Eigen3::Eigen orocos-kdl kdl_parser::kdl_parser urdf::urdf)
 
 add_library(${PROJECT_NAME} SHARED
   src/effort_controller_base.cpp
@@ -107,6 +116,11 @@ if(BUILD_TESTING)
   target_link_libraries(test_pinocchio_model ur5e_teaching_dynamics)
   target_compile_definitions(test_pinocchio_model PRIVATE UR5E_TEST_URDF="${UR5E_TEST_URDF}")
   add_dependencies(test_pinocchio_model ur5e_test_urdf)
+
+  ament_add_gtest(test_dynamics_equivalence test/test_dynamics_equivalence.cpp)
+  target_link_libraries(test_dynamics_equivalence ur5e_teaching_dynamics)
+  target_compile_definitions(test_dynamics_equivalence PRIVATE UR5E_TEST_URDF="${UR5E_TEST_URDF}")
+  add_dependencies(test_dynamics_equivalence ur5e_test_urdf)
 
   ament_add_gmock(test_load_controllers test/test_load_controllers.cpp)
   target_link_libraries(test_load_controllers

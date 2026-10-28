@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-lyrical-ros-gz-sim \
       ros-lyrical-ros-gz-interfaces \
       ros-lyrical-pinocchio \
+      ros-lyrical-kdl-parser \
+      ros-lyrical-orocos-kdl-vendor \
+      ros-lyrical-urdf \
       ros-lyrical-generate-parameter-library \
       ros-lyrical-realtime-tools \
       ros-lyrical-kinematics-interface \

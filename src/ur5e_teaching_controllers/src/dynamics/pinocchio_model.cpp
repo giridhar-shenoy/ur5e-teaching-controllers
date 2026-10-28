@@ -15,8 +15,8 @@ namespace ur5e_teaching_controllers::dynamics
 
 PinocchioModel::PinocchioModel(
   const std::string & urdf, const std::vector<std::string> & joint_names,
-  const std::string & tip_frame)
-: joint_names_(joint_names)
+  const std::string & tip_frame, double gravity_z)
+: DynamicsModel(joint_names, gravity_z)
 {
   try {
     pinocchio::urdf::buildModelFromXML(urdf, model_);
@@ -58,6 +58,7 @@ PinocchioModel::PinocchioModel(
   tip_frame_id_ = model_.getFrameId(tip_frame);
   tip_joint_id_ = model_.frames[tip_frame_id_].parentJoint;
   tip_body_inertia_without_payload_ = model_.inertias[tip_joint_id_];
+  model_.gravity.linear(Eigen::Vector3d(0.0, 0.0, gravity_z_));
 
   data_ = pinocchio::Data(model_);
   q_ = Eigen::VectorXd::Zero(model_.nq);
@@ -67,6 +68,11 @@ PinocchioModel::PinocchioModel(
   mass_ = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
   jacobian_pin_ = Matrix6x::Zero(6, model_.nv);
   jacobian_ = Matrix6x::Zero(6, static_cast<Eigen::Index>(n));
+}
+
+std::unique_ptr<DynamicsModel> PinocchioModel::clone() const
+{
+  return std::unique_ptr<DynamicsModel>(new PinocchioModel(*this));
 }
 
 void PinocchioModel::set_payload(double mass, const Eigen::Vector3d & com_in_tip)
