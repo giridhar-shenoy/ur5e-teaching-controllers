@@ -5,7 +5,7 @@
 ![UR5e switching between trajectory tracking and gravity-compensated hand guiding in Gazebo](docs/assets/hero.gif)
 
 This is a set of ros2_control effort controllers for a simulated UR5e (ROS 2 Lyrical, Gazebo Jetty): joint-space PID tracking with Pinocchio RNEA feedforward, and gravity-compensated hand guiding with a runtime payload model. These are controllers I shipped on production 6-axis arms, rebuilt in public on a UR5e, with every dynamics term computed from the URDF instead of hand-tuned. <!-- headline:begin -->
-At 1× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE to 0.10 ± 0.07 mrad (PID alone: 8.82 ± 0.01 mrad), and in hand guiding a 1 kg payload-model error costs the operator 9.81 ± 0.00 N of vertical force to hold the arm still (Δm·g = 9.81 N) and, let go, carries the TCP 201 ± 4 mm in one second.
+At 1× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE to 0.05 ± 0.02 mrad (PID alone: 8.83 ± 0.01 mrad), and in hand guiding a 1 kg payload-model error costs the operator 9.81 ± 0.00 N of vertical force to hold the arm still (Δm·g = 9.81 N) and, let go, carries the TCP 201 ± 3 mm in one second.
 <!-- headline:end -->
 
 **Language split:** C++17 for everything in the 500 Hz control loop (controllers, Pinocchio
@@ -55,9 +55,9 @@ numbers and the commit/seed of each run are in [docs/results.md](docs/results.md
 
 | Speed (× nominal) | PID: worst-joint RMSE (mrad) | PID + RNEA FF: worst-joint RMSE (mrad) | PID: worst max \|e\| (mrad) | PID + RNEA FF: worst max \|e\| (mrad) | Regenerate with |
 |---|---|---|---|---|---|
-| 0.5 | 5.34 ± 0.01 | 0.07 ± 0.00 | 11.94 ± 0.03 | 0.49 ± 0.00 | `scripts/bench_tracking.sh` |
-| 1 | 8.82 ± 0.01 | 0.10 ± 0.07 | 20.68 ± 0.16 | 2.37 ± 2.44 | `scripts/bench_tracking.sh` |
-| 2 | 10.70 ± 0.03 | 0.18 ± 0.06 | 26.08 ± 0.14 | 2.49 ± 1.02 | `scripts/bench_tracking.sh` |
+| 0.5 | 5.34 ± 0.00 | 0.03 ± 0.01 | 11.89 ± 0.04 | 0.48 ± 0.00 | `scripts/bench_tracking.sh` |
+| 1 | 8.83 ± 0.01 | 0.05 ± 0.02 | 20.60 ± 0.05 | 0.87 ± 0.16 | `scripts/bench_tracking.sh` |
+| 2 | 10.70 ± 0.03 | 0.13 ± 0.02 | 26.11 ± 0.06 | 1.89 ± 0.00 | `scripts/bench_tracking.sh` |
 
 **Hand guiding with a wrong payload model** (GravityCompHandGuidingController, model payload fixed, actual Gazebo payload varied; mean ± std over repetitions):
 
@@ -65,7 +65,7 @@ numbers and the commit/seed of each run are in [docs/results.md](docs/results.md
 |---|---|---|---|---|---|---|
 | 1 / 0 | -1 | 374.40 ± 1.96 | 295.94 ± 4.14 | -9.81 ± 0.00 | -9.81 | `scripts/bench_handguide.sh` |
 | 1 / 1 | +0 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 | `scripts/bench_handguide.sh` |
-| 1 / 2 | +1 | 201.94 ± 2.38 | 201.04 ± 3.53 | 9.81 ± 0.00 | 9.81 | `scripts/bench_handguide.sh` |
+| 1 / 2 | +1 | 202.04 ± 2.48 | 200.91 ± 3.35 | 9.81 ± 0.00 | 9.81 | `scripts/bench_handguide.sh` |
 <!-- results:end -->
 
 <picture>

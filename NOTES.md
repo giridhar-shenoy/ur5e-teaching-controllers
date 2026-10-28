@@ -178,3 +178,59 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
   controller's samples leaked into the next recording (gave exactly 0 N).
 - 05:42 final hand-guiding CSV (commit bd001f6): drift at 1 s 374 / 0 / 202 mm/s, displacement
   296 / 0 / 201 mm for Δm -1 / 0 / +1 kg. Tracking CSV unchanged (commit 7c938a6).
+
+### Acceptance status (feature prompt, v0.1 scope) — verified tonight
+
+| Item | Status | Evidence |
+|---|---|---|
+| CI green on GitHub | BLOCKED (billing) | MORNING.md #1; local equivalents below |
+| colcon build | done | `scripts/build.sh` (all 3 packages) |
+| colcon test, ≥ 12 gtest | done: 41 gtest cases, 45/45 colcon tests | `colcon test && colcon test-result` |
+| ci_smoke.sh | done locally (17 s; + mode switching section) | CHECKPOINTS.md |
+| rosdep for CI | `rosdep check --from-paths src --ignore-src` → all satisfied | |
+| Docker image builds | UNVERIFIED (no Docker here; CI blocked) | |
+| sim.launch.py mode:=track | see CHECKPOINT 4 | |
+| mode.launch.py track / handguide | done | CHECKPOINT 2, ci_smoke mode section |
+| results/tracking.csv, handguide.csv | done, 3 reps, commit + seed stamped | CHECKPOINT 3 |
+| GIFs ≤ 3 MB | done: 0.73 / 0.42 / 1.07 MB | record_gifs.sh output |
+| regenerate_all.sh < 60 min | done: 489 s and 438 s wall (two full runs) | NOTES above |
+| No hard-coded UR5e dynamics | done: all from robot_description via Pinocchio | `grep` of src: no masses/lengths |
+| THIRD_PARTY.md | only `.clang-format`; no code copied (sim.launch.py re-implements the stock launch's structure, see below) | |
+
+Note on THIRD_PARTY: `sim.launch.py` follows the structure of ur_simulation_gz's BSD-3
+`ur_sim_control.launch.py` (same nodes in the same roles) but is written fresh; no lines were
+copied, so it has no THIRD_PARTY entry. If you prefer to credit it anyway, add a row.
+
+## CHANGELOG entry for this session
+
+See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,
+41 gtests, mode manager, two benchmarks, GIF pipeline, docs; Fixed: stock-launch workarounds,
+deactivation torque drop, RT-safe parameters and trajectory hand-off, gravity mismatch,
+hand-guiding damping and fallback).
+
+## Open questions for Giri
+
+1. CI: fix the Actions billing/spending limit, or make the repo public when ready (MORNING #1)?
+2. Commit author e-mail is `the old work e-mail` (global git config). Keep it, or set your
+   personal address for this repo (MORNING #2)?
+3. README "What transfers to a real UR": is "the stock driver gives position/velocity, not
+   torque" the claim you want, given newer PolyScope torque features?
+4. Hand-guiding damping [25, 25, 15, 3, 1.5, 0.05] is my choice (drift vs push effort).
+5. SHOULD (TcpJogController + bench_jog) was not started: the MUST's "CI green" item is not
+   green (billing), and the sprint rule says SHOULD only after MUST is green. Start it once CI
+   runs?
+6. Do you want the stock `ur_sim_control.launch.py` failures (no params on Lyrical, double
+   spawn) reported upstream to Universal_Robots_ROS2_GZ_Simulation? I did not open any issue.
+7. gz_ros2_control 3.0.9 effort -> position switch leaves joints uncommanded (arm falls): worth
+   an upstream issue once you have checked it against the current source?
+
+### Time log (continued)
+
+- 05:53 final run at HEAD 26e5920 (clean): ci_smoke PASS 23 s (incl. track/handguide mode
+  check), `regenerate_all.sh` **436 s wall** (tracking 273 s, hand guiding 108 s, GIFs). All CSV
+  rows stamped 26e5920. Run-to-run: tracking FF worst-joint RMSE at 1x was 0.10 ± 0.07 mrad
+  (commit 7c938a6 run) vs 0.05 ± 0.02 (final); PID-only 8.82 vs 8.83 mrad. Hand guiding identical
+  to the bd001f6 run to the printed precision.
+- 05:55 acceptance: `ros2 launch ur5e_teaching_bringup sim.launch.py gazebo_gui:=false
+  launch_rviz:=false mode:=track` -> pid_ff_trajectory_controller active after 11 s, trajectory
+  followed, 22 s total (< 120 s).
