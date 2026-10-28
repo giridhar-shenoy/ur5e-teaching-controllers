@@ -49,7 +49,10 @@ case "${1:-}" in
     done
     deadline=$((SECONDS + ${STARTUP_S:-180}))
     while [ "${SECONDS}" -lt "${deadline}" ]; do
-      if ros2 control list_controllers 2>/dev/null | grep -Eq "^joint_trajectory_controller .*active"; then
+      # Bounded: without a controller manager the CLI waits forever, and a poll that outlives this
+      # script keeps the lock descriptors it inherited (it held all three locks once; NOTES.md).
+      if timeout 10 ros2 control list_controllers 2>/dev/null \
+          | grep -Eq "^joint_trajectory_controller .*active"; then
         echo "[sim] up (sid ${sid}, waited ${waited} s for the lock)"
         exit 0
       fi
