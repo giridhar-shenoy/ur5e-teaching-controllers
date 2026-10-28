@@ -11,21 +11,21 @@ Every number on this page is computed by `scripts/make_results.py` from the CSVs
 
 | Speed (× nominal) | PID: worst-joint RMSE (mrad) | PID + RNEA FF: worst-joint RMSE (mrad) | PID: worst max \|e\| (mrad) | PID + RNEA FF: worst max \|e\| (mrad) | Regenerate with |
 |---|---|---|---|---|---|
-| 0.5 | 5.34 ± 0.00 | 0.03 ± 0.01 | 11.89 ± 0.04 | 0.48 ± 0.00 | `scripts/bench_tracking.sh` |
-| 1 | 8.83 ± 0.01 | 0.05 ± 0.02 | 20.60 ± 0.05 | 0.87 ± 0.16 | `scripts/bench_tracking.sh` |
-| 2 | 10.70 ± 0.03 | 0.13 ± 0.02 | 26.11 ± 0.06 | 1.89 ± 0.00 | `scripts/bench_tracking.sh` |
+| 0.5 | 5.35 ± 0.01 | 0.03 ± 0.01 | 11.90 ± 0.03 | 0.59 ± 0.12 | `scripts/bench_tracking.sh` |
+| 1 | 8.83 ± 0.01 | 0.04 ± 0.03 | 20.59 ± 0.03 | 1.22 ± 0.47 | `scripts/bench_tracking.sh` |
+| 2 | 10.70 ± 0.04 | 0.14 ± 0.05 | 26.07 ± 0.11 | 1.88 ± 0.01 | `scripts/bench_tracking.sh` |
 
 **Hand guiding with a wrong payload model** (GravityCompHandGuidingController, model payload fixed, actual Gazebo payload varied; mean ± std over repetitions):
 
 | Model / actual payload (kg) | Payload error (kg) | TCP drift speed at 1 s (mm/s) | TCP drift in 1 s (mm) | Effort to hold, F_z (N) | Expected (Δm·g, N) | Regenerate with |
 |---|---|---|---|---|---|---|
-| 1 / 0 | -1 | 374.40 ± 1.96 | 295.94 ± 4.14 | -9.81 ± 0.00 | -9.81 | `scripts/bench_handguide.sh` |
+| 1 / 0 | -1 | 374.42 ± 1.98 | 296.18 ± 4.44 | -9.81 ± 0.00 | -9.81 | `scripts/bench_handguide.sh` |
 | 1 / 1 | +0 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 | `scripts/bench_handguide.sh` |
-| 1 / 2 | +1 | 202.04 ± 2.48 | 200.91 ± 3.35 | 9.81 ± 0.00 | 9.81 | `scripts/bench_handguide.sh` |
+| 1 / 2 | +1 | 201.97 ± 2.39 | 201.04 ± 3.53 | 9.81 ± 0.00 | 9.81 | `scripts/bench_handguide.sh` |
 
 ## Tracking — details
 
-`results/tracking.csv`: commit `cd0238560d06`, seed 1, physics step 0.001 s, controller update rate 500 Hz; 3 repetitions per condition.
+`results/tracking.csv`: commit `693203613ca1`, seed 1, physics step 0.001 s, controller update rate 500 Hz; 3 repetitions per condition.
 
 Method: the arm is homed by the tracking controller itself (feedforward on) to a
 seeded random offset (≤ 0.05 rad per joint) from the home pose; for the PID-only
@@ -44,16 +44,16 @@ Per joint, RMSE / max |e| in mrad, mean ± std over repetitions:
 
 | Speed | Variant | shoulder_pan_joint RMSE / max (mrad) | shoulder_lift_joint RMSE / max (mrad) | elbow_joint RMSE / max (mrad) | wrist_1_joint RMSE / max (mrad) | wrist_2_joint RMSE / max (mrad) | wrist_3_joint RMSE / max (mrad) |
 |---|---|---|---|---|---|---|---|
-| 0.5 | PID | 0.16 ± 0.01 / 1.00 ± 0.02 | 1.00 ± 0.01 / 2.11 ± 0.07 | 0.08 ± 0.01 / 0.36 ± 0.15 | 1.24 ± 0.12 / 3.06 ± 0.34 | 5.34 ± 0.00 / 11.89 ± 0.04 | 0.04 ± 0.01 / 0.76 ± 0.24 |
-| 0.5 | PID + RNEA FF | 0.02 ± 0.01 / 0.36 ± 0.00 | 0.01 ± 0.00 / 0.12 ± 0.00 | 0.01 ± 0.00 / 0.15 ± 0.00 | 0.02 ± 0.01 / 0.27 ± 0.00 | 0.02 ± 0.01 / 0.37 ± 0.01 | 0.03 ± 0.01 / 0.48 ± 0.00 |
-| 1 | PID | 0.89 ± 0.04 / 3.06 ± 0.33 | 1.92 ± 0.01 / 4.10 ± 0.09 | 0.15 ± 0.00 / 0.53 ± 0.02 | 2.02 ± 0.23 / 4.85 ± 0.59 | 8.83 ± 0.01 / 20.60 ± 0.05 | 0.14 ± 0.03 / 1.36 ± 0.15 |
-| 1 | PID + RNEA FF | 0.04 ± 0.02 / 0.65 ± 0.11 | 0.01 ± 0.00 / 0.24 ± 0.00 | 0.02 ± 0.00 / 0.30 ± 0.00 | 0.03 ± 0.01 / 0.49 ± 0.09 | 0.04 ± 0.02 / 0.67 ± 0.14 | 0.05 ± 0.02 / 0.87 ± 0.16 |
-| 2 | PID | 4.60 ± 0.20 / 11.42 ± 0.99 | 3.65 ± 0.01 / 7.65 ± 0.13 | 0.41 ± 0.02 / 1.08 ± 0.05 | 2.85 ± 0.32 / 6.44 ± 0.97 | 10.70 ± 0.03 / 26.11 ± 0.06 | 0.50 ± 0.02 / 2.94 ± 0.80 |
-| 2 | PID + RNEA FF | 0.11 ± 0.01 / 1.40 ± 0.10 | 0.04 ± 0.01 / 0.48 ± 0.02 | 0.05 ± 0.01 / 0.60 ± 0.03 | 0.08 ± 0.01 / 1.06 ± 0.02 | 0.11 ± 0.01 / 1.45 ± 0.14 | 0.13 ± 0.02 / 1.89 ± 0.00 |
+| 0.5 | PID | 0.16 ± 0.01 / 0.75 ± 0.14 | 1.00 ± 0.01 / 2.10 ± 0.02 | 0.08 ± 0.00 / 0.32 ± 0.08 | 1.24 ± 0.12 / 3.06 ± 0.34 | 5.35 ± 0.01 / 11.90 ± 0.03 | 0.03 ± 0.01 / 0.53 ± 0.06 |
+| 0.5 | PID + RNEA FF | 0.02 ± 0.01 / 0.46 ± 0.09 | 0.01 ± 0.00 / 0.21 ± 0.13 | 0.01 ± 0.00 / 0.28 ± 0.15 | 0.02 ± 0.00 / 0.34 ± 0.09 | 0.02 ± 0.01 / 0.47 ± 0.10 | 0.03 ± 0.01 / 0.59 ± 0.12 |
+| 1 | PID | 0.88 ± 0.04 / 2.69 ± 0.27 | 1.92 ± 0.01 / 4.04 ± 0.10 | 0.14 ± 0.00 / 0.52 ± 0.03 | 2.03 ± 0.23 / 4.84 ± 0.61 | 8.83 ± 0.01 / 20.59 ± 0.03 | 0.11 ± 0.00 / 1.00 ± 0.15 |
+| 1 | PID + RNEA FF | 0.04 ± 0.02 / 0.93 ± 0.41 | 0.02 ± 0.01 / 0.42 ± 0.43 | 0.02 ± 0.02 / 0.53 ± 0.51 | 0.03 ± 0.01 / 0.69 ± 0.28 | 0.04 ± 0.02 / 0.96 ± 0.45 | 0.04 ± 0.03 / 1.22 ± 0.47 |
+| 2 | PID | 4.60 ± 0.20 / 11.26 ± 0.87 | 3.65 ± 0.01 / 7.68 ± 0.14 | 0.41 ± 0.02 / 1.04 ± 0.06 | 2.85 ± 0.32 / 6.44 ± 0.95 | 10.70 ± 0.04 / 26.07 ± 0.11 | 0.50 ± 0.01 / 2.55 ± 0.84 |
+| 2 | PID + RNEA FF | 0.12 ± 0.03 / 1.45 ± 0.08 | 0.04 ± 0.01 / 0.48 ± 0.02 | 0.05 ± 0.01 / 0.60 ± 0.02 | 0.08 ± 0.02 / 1.07 ± 0.02 | 0.12 ± 0.04 / 1.51 ± 0.10 | 0.14 ± 0.05 / 1.88 ± 0.01 |
 
 ## Hand guiding — details
 
-`results/handguide.csv`: commit `cd0238560d06`, seed 1, physics step 0.001 s, controller update rate 500 Hz; 3 repetitions per condition.
+`results/handguide.csv`: commit `693203613ca1`, seed 1, physics step 0.001 s, controller update rate 500 Hz; 3 repetitions per condition.
 
 Method: per repetition the tracking controller holds the arm at a seeded random
 offset (≤ 0.05 rad per joint) from home until its integrator has converged (3 s);
