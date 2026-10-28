@@ -132,7 +132,7 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
 - 04:30–04:45 R2 holds the Gazebo lock (bench_planners.sh, timeout 3600 s); wrote docs, results
   tooling and GIF pipeline meanwhile. sim_session.sh now waits for the lock without a deadline.
 - 04:45–04:53 first full `scripts/regenerate_all.sh`: exit 0 in **489 s wall** (tracking 284 s,
-  hand-guiding 99 s, GIFs ~100 s). Numbers (commit f9ecd71, not kept): tracking worst-joint RMSE
+  hand-guiding 99 s, GIFs ~100 s). Numbers (commit a1a3c35, not kept): tracking worst-joint RMSE
   PID 5.3 / 8.8 / 10.7 mrad and PID+FF 0.05–0.27 mrad at 0.5 / 1 / 2x; hand-guiding hold force
   Fz -10.57 / -0.55 / +8.99 N for payload error -1 / 0 / +1 kg (expected -9.81 / 0 / +9.81).
   => a constant ~ -0.6 N offset (arm accelerates upward a little even with a perfect payload
@@ -153,18 +153,18 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
   `Activating fallback controllers : [ pid_ff_trajectory_controller ]`, arm held at
   q [0, -1.565, 1.578, -1.568, -1.57, 0]. A 25 N push with the default cap did not trip it.
 - Lock contention: sim starts waited 162 s and 461 s for the shared Gazebo lock (R2 benchmarks).
-- 05:20 second full regen (commit e05757d, 438 s wall). Gravity 9.81 cut zero-error drift from
+- 05:20 second full regen (commit e73a586, 438 s wall). Gravity 9.81 cut zero-error drift from
   4 mm/s to 0.3 mm/s. But hand-guiding with damping [8, 8, 5, 2, 1, 0.05]: TCP moved
   0.99 m (Δm = -1 kg) and 0.50 m (Δm = +1 kg) in 2 s; the +1 kg arm ended on the floor, so its
   "speed at 2 s" (4.4 mm/s) measured a collision, not drift. Hold force was fine
   (-10.51 / -0.49 / +9.15 N vs -9.81 / 0 / +9.81). Raised damping to [25, 25, 15, 3, 1.5, 0.05]
-  (D*dt/M < 1 kept) and re-ran hand guiding + GIFs only; tracking CSV stays at e05757d.
-- 05:30 hand-guiding re-run with damping [25, 25, 15, 3, 1.5, 0.05] (commit 7f89cd9): drift at 2 s
+  (D*dt/M < 1 kept) and re-ran hand guiding + GIFs only; tracking CSV stays at e73a586.
+- 05:30 hand-guiding re-run with damping [25, 25, 15, 3, 1.5, 0.05] (commit c5c3498): drift at 2 s
   0.28 / 0.0000 / 0.12 m/s and displacement 0.60 / 0.003 / 0.36 m for Δm -1 / 0 / +1 kg; the
   release-acceleration hold force degraded to -9.6 / -0.96 / +7.9 N because with this damping the
   wrist joints reach terminal speed inside the 40 ms fit window. Replaced by a static measurement
   (converged PID hold torque minus hand-guiding g_model, through J^-T) and drift at 1 s
-  (commit ef8986f). First attempt failed on my bug (set the tracker's params before loading it,
+  (commit 93b62f7). First attempt failed on my bug (set the tracker's params before loading it,
   fixed in the next commit — which also carries the 10 N GIF pushes, not mentioned in its message).
 - Lesson for the README: joint damping alone does not make a payload-model error safe; even
   3x damping lets 1 kg of error carry the TCP tens of centimetres in 2 s.
@@ -173,20 +173,20 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
   elbow already moved at 0.052 rad/s although the arm was still under the tracking controller.
   Cause: `on_deactivate()` wrote zero effort and the hardware applied it for one 2 ms cycle
   before the next controller's first update (25 N·m / 0.88 kg m² × 2 ms ≈ 0.057 rad/s). Fixed in
-  6309d05: deactivation leaves the last torque; the speed-cap trip writes gravity + damping.
+  f2bcf5f: deactivation leaves the last torque; the speed-cap trip writes gravity + damping.
   After the fix: hg[0] torque == hold torque, qd = 0; hold force -9.81 / 0.00 / +9.81 N.
   Also fixed: both controller_state subscriptions fed one recording, so the outgoing
   controller's samples leaked into the next recording (gave exactly 0 N).
-- 05:42 final hand-guiding CSV (commit 6309d05): drift at 1 s 374 / 0 / 202 mm/s, displacement
-  296 / 0 / 201 mm for Δm -1 / 0 / +1 kg. Tracking CSV unchanged (commit e05757d).
+- 05:42 final hand-guiding CSV (commit f2bcf5f): drift at 1 s 374 / 0 / 202 mm/s, displacement
+  296 / 0 / 201 mm for Δm -1 / 0 / +1 kg. Tracking CSV unchanged (commit e73a586).
 
 ### Time log (continued)
 
-- 05:53 final run at HEAD cd02385 (clean): ci_smoke PASS 23 s (incl. track/handguide mode
+- 05:53 final run at HEAD c048632 (clean): ci_smoke PASS 23 s (incl. track/handguide mode
   check), `regenerate_all.sh` **436 s wall** (tracking 273 s, hand guiding 108 s, GIFs). All CSV
-  rows stamped cd02385. Run-to-run: tracking FF worst-joint RMSE at 1x was 0.10 ± 0.07 mrad
-  (commit e05757d run) vs 0.05 ± 0.02 (final); PID-only 8.82 vs 8.83 mrad. Hand guiding identical
-  to the 6309d05 run to the printed precision.
+  rows stamped c048632. Run-to-run: tracking FF worst-joint RMSE at 1x was 0.10 ± 0.07 mrad
+  (commit e73a586 run) vs 0.05 ± 0.02 (final); PID-only 8.82 vs 8.83 mrad. Hand guiding identical
+  to the f2bcf5f run to the printed precision.
 - 05:55 acceptance: `ros2 launch ur5e_teaching_bringup sim.launch.py gazebo_gui:=false
   launch_rviz:=false mode:=track` -> pid_ff_trajectory_controller active after 11 s, trajectory
   followed, 22 s total (< 120 s).
