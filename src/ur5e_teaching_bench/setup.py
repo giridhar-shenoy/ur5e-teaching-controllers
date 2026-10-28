@@ -22,6 +22,7 @@ setup(
             "mode_manager = ur5e_teaching_bench.mode_manager:main",
             "bench_tracking = ur5e_teaching_bench.bench_tracking:main",
             "bench_handguide = ur5e_teaching_bench.bench_handguide:main",
+            "bench_jog = ur5e_teaching_bench.bench_jog:main",
             "record_mode = ur5e_teaching_bench.record_mode:main",
         ],
     },
