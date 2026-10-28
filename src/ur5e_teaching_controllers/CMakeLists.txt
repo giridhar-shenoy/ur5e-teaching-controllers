@@ -12,6 +12,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   control_msgs
   controller_interface
   generate_parameter_library
+  geometry_msgs
   hardware_interface
   kdl_parser
   orocos_kdl_vendor
@@ -20,6 +21,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
   rclcpp_lifecycle
   realtime_tools
+  std_msgs
   trajectory_msgs
   urdf
 )
@@ -35,6 +37,8 @@ generate_parameter_library(pid_ff_trajectory_controller_parameters
   config/pid_ff_trajectory_controller_parameters.yaml)
 generate_parameter_library(gravity_comp_handguide_controller_parameters
   config/gravity_comp_handguide_controller_parameters.yaml)
+generate_parameter_library(tcp_jog_controller_parameters
+  config/tcp_jog_controller_parameters.yaml)
 
 # Dynamics wrapper: one interface, two backends (Pinocchio, orocos KDL). No ROS graph; unit-tested
 # and benchmarked on its own.
@@ -56,6 +60,7 @@ add_library(${PROJECT_NAME} SHARED
   src/effort_controller_base.cpp
   src/pid_ff_trajectory_controller.cpp
   src/gravity_comp_handguide_controller.cpp
+  src/tcp_jog_controller.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -65,7 +70,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ur5e_teaching_dynamics
   pid_ff_trajectory_controller_parameters
   gravity_comp_handguide_controller_parameters
+  tcp_jog_controller_parameters
   ${control_msgs_TARGETS}
+  ${geometry_msgs_TARGETS}
+  ${std_msgs_TARGETS}
   controller_interface::controller_interface
   hardware_interface::hardware_interface
   pluginlib::pluginlib
@@ -80,6 +88,7 @@ install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(
   TARGETS ${PROJECT_NAME} ur5e_teaching_dynamics
     pid_ff_trajectory_controller_parameters gravity_comp_handguide_controller_parameters
+    tcp_jog_controller_parameters
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -116,6 +125,11 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_control_laws test/test_control_laws.cpp)
   target_include_directories(test_control_laws PRIVATE src)
+
+  ament_add_gtest(test_dls test/test_dls.cpp)
+  target_link_libraries(test_dls ur5e_teaching_dynamics)
+  target_compile_definitions(test_dls PRIVATE UR5E_TEST_URDF="${UR5E_TEST_URDF}")
+  add_dependencies(test_dls ur5e_test_urdf)
 
   ament_add_gtest(test_pinocchio_model test/test_pinocchio_model.cpp)
   target_link_libraries(test_pinocchio_model ur5e_teaching_dynamics)

@@ -23,6 +23,7 @@
 #include "controller_manager/controller_manager.hpp"
 #include "controller_manager_msgs/srv/switch_controller.hpp"
 #include "dynamics/pinocchio_model.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "lifecycle_msgs/msg/state.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
@@ -77,6 +78,9 @@ std::string write_params_file()
     << "    i_clamp: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]\n"
     << "    max_velocity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]\n"
     << "    max_acceleration: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0]\n"
+    << "jog:\n  ros__parameters:\n"
+    << joints << "    kp: [600.0, 1200.0, 500.0, 30.0, 8.0, 0.5]\n"
+    << "    kd: [50.0, 100.0, 40.0, 1.5, 0.3, 0.02]\n"
     << "bad_backend:\n  ros__parameters:\n"
     << joints << "    dynamics_backend: rbdl\n";
   return path;
@@ -106,6 +110,8 @@ protected:
          "ur5e_teaching_controllers/GravityCompHandGuidingController"});
       cm_->set_parameter({std::string(name) + ".params_file", params});
     }
+    cm_->set_parameter({"jog.type", "ur5e_teaching_controllers/TcpJogController"});
+    cm_->set_parameter({"jog.params_file", params});
     cm_->set_parameter({"track_kdl.type", "ur5e_teaching_controllers/PidFfTrajectoryController"});
     cm_->set_parameter({"track_kdl.params_file", params});
   }
@@ -497,5 +503,62 @@ TEST_F(LoadControllersTest, ComputedTorqueCanBeSelectedAtRuntimeAndHoldsWithGrav
   for (int j = 0; j < 6; ++j) {
     EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-9) << kJoints[j];
     EXPECT_NEAR(state.reference.effort[static_cast<std::size_t>(j)], g[j], 1e-9) << kJoints[j];
+  }
+}
+
+// --- TcpJogController ------------------------------------------------------------------------
+
+TEST_F(LoadControllersTest, JogIntegratesATwistIntoAJointReferenceAndStopsOnTheDeadman)
+{
+  activate("jog");
+  auto pub = listener_->create_publisher<geometry_msgs::msg::TwistStamped>("/jog/twist", 10);
+  geometry_msgs::msg::TwistStamped twist;
+  twist.header.frame_id = "world";
+  twist.twist.linear.x = 0.02;  // 2 cm/s along the base x axis
+  twist.twist.angular.z = 0.05;
+  // Stream at 100 Hz for 0.5 s (well inside the 0.1 s deadman), then stop.
+  for (int i = 0; i < 50; ++i) {
+    pub->publish(twist);
+    std::this_thread::sleep_for(10ms);
+  }
+  const StateMsg moving = latest_state(2);
+  std::this_thread::sleep_for(400ms);  // deadman timeout + deceleration at the acceleration limit
+  const StateMsg stopped = latest_state();
+  stop_loops();
+
+  // While streaming, the reference velocity maps through J(q_des) onto the commanded twist
+  // (far from singularities, inside the speed limits: undamped and unscaled).
+  ur5e_teaching_controllers::dynamics::PinocchioModel model(urdf_, kJoints, "tool0");
+  Eigen::VectorXd q(6), qd(6);
+  for (int j = 0; j < 6; ++j) {
+    q[j] = moving.reference.positions[static_cast<std::size_t>(j)];
+    qd[j] = moving.reference.velocities[static_cast<std::size_t>(j)];
+  }
+  Eigen::Matrix<double, 6, 1> expected;
+  expected << 0.02, 0.0, 0.0, 0.0, 0.0, 0.05;
+  const Eigen::VectorXd v = model.tip_jacobian(q) * qd;
+  // One cycle of integration separates J(q_des) at the time qd was computed from q_des now.
+  EXPECT_TRUE(v.isApprox(expected, 1e-3)) << v.transpose();
+  for (std::size_t j = 0; j < 6; ++j) {
+    EXPECT_EQ(stopped.reference.velocities[j], 0.0) << kJoints[j];
+    EXPECT_TRUE(std::isfinite(stopped.output.effort[j])) << kJoints[j];
+  }
+}
+
+TEST_F(LoadControllersTest, JogRefusesATwistInAnotherFrame)
+{
+  activate("jog");
+  auto pub = listener_->create_publisher<geometry_msgs::msg::TwistStamped>("/jog/twist", 10);
+  geometry_msgs::msg::TwistStamped twist;
+  twist.header.frame_id = "tool0";
+  twist.twist.linear.x = 0.05;
+  for (int i = 0; i < 30; ++i) {
+    pub->publish(twist);
+    std::this_thread::sleep_for(10ms);
+  }
+  const StateMsg state = latest_state();
+  stop_loops();
+  for (std::size_t j = 0; j < 6; ++j) {
+    EXPECT_EQ(state.reference.velocities[j], 0.0) << kJoints[j];
   }
 }

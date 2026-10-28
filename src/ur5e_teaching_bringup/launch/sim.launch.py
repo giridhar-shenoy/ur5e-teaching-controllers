@@ -40,7 +40,11 @@ from launch_ros.actions import Node
 
 WORLD_NAME = "bench"
 # The effort controllers that take a dynamics_backend parameter.
-DYNAMICS_CONTROLLERS = ("pid_ff_trajectory_controller", "gravity_comp_handguide_controller")
+DYNAMICS_CONTROLLERS = (
+    "pid_ff_trajectory_controller",
+    "gravity_comp_handguide_controller",
+    "tcp_jog_controller",
+)
 
 
 def _controllers_with_params_file(src: str, dynamics_backend: str) -> str:
@@ -219,7 +223,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "mode",
             default_value="none",
-            choices=["none", "track", "handguide"],
+            choices=["none", "track", "handguide", "jog"],
             description="Controller mode to switch to once the robot is up (mode.launch.py).",
         ),
     ]

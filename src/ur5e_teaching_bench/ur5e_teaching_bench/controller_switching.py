@@ -19,6 +19,7 @@ from rclpy.node import Node
 MODES = {
     "track": "pid_ff_trajectory_controller",
     "handguide": "gravity_comp_handguide_controller",
+    "jog": "tcp_jog_controller",
 }
 
 
