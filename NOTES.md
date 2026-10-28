@@ -130,3 +130,51 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
   max RMSE 0.13 mrad, max |e| 1.9 mrad at 2x speed.
 - 04:30–04:45 R2 holds the Gazebo lock (bench_planners.sh, timeout 3600 s); wrote docs, results
   tooling and GIF pipeline meanwhile. sim_session.sh now waits for the lock without a deadline.
+- 04:45–04:53 first full `scripts/regenerate_all.sh`: exit 0 in **489 s wall** (tracking 284 s,
+  hand-guiding 99 s, GIFs ~100 s). Numbers (commit b4fdaeb, not kept): tracking worst-joint RMSE
+  PID 5.3 / 8.8 / 10.7 mrad and PID+FF 0.05–0.27 mrad at 0.5 / 1 / 2x; hand-guiding hold force
+  Fz -10.57 / -0.55 / +8.99 N for payload error -1 / 0 / +1 kg (expected -9.81 / 0 / +9.81).
+  => a constant ~ -0.6 N offset (arm accelerates upward a little even with a perfect payload
+  model; 4 mm/s drift at 2 s). Candidate 1: SDF default gravity is 9.8, Pinocchio uses 9.81
+  (my estimate says this explains only ~0.1 N; fixed anyway by setting <gravity> in the worlds).
+  GIF review: payload cube floated 2 cm under the flange (CoM 5 cm, cube 6 cm) -> payload CoM
+  default 0.03 m everywhere; 12 N demo pushes threw the arm to 0.5 m/s -> 5 N pushes.
+- 04:55–05:10 independent read-only review of the controller code (sub-agent). Fixed:
+  non-blocking `try_update_params` + whole-set size validation of runtime params (a 1-element
+  `kp` was read out of bounds), NaN/limit validation of trajectories, stale-start check on
+  adoption (`max_start_deviation`), trajectories kept alive by the callback so update() never
+  frees them, positive effort limits required. Documented, not fixed: pre-emption at speed steps
+  qd_des to 0 (rest-to-rest profiles). Added `fallback_controllers: [pid_ff_trajectory_controller]`
+  for the hand-guiding controller (ros2_control 6.10.1 supports it: `strings libcontroller_manager.so
+  | grep fallback`). New tests -> 41 gtest cases; colcon test 45/45.
+- 05:10 fallback verified in sim: cap lowered to 0.3 rad/s at runtime, 15 N push ->
+  `speed cap: |qd| of wrist_1_joint is 0.385 rad/s > 0.300 rad/s; deactivating` ->
+  `Activating fallback controllers : [ pid_ff_trajectory_controller ]`, arm held at
+  q [0, -1.565, 1.578, -1.568, -1.57, 0]. A 25 N push with the default cap did not trip it.
+- Lock contention: sim starts waited 162 s and 461 s for the shared Gazebo lock (R2 benchmarks).
+- 05:20 second full regen (commit 7c938a6, 438 s wall). Gravity 9.81 cut zero-error drift from
+  4 mm/s to 0.3 mm/s. But hand-guiding with damping [8, 8, 5, 2, 1, 0.05]: TCP moved
+  0.99 m (Δm = -1 kg) and 0.50 m (Δm = +1 kg) in 2 s; the +1 kg arm ended on the floor, so its
+  "speed at 2 s" (4.4 mm/s) measured a collision, not drift. Hold force was fine
+  (-10.51 / -0.49 / +9.15 N vs -9.81 / 0 / +9.81). Raised damping to [25, 25, 15, 3, 1.5, 0.05]
+  (D*dt/M < 1 kept) and re-ran hand guiding + GIFs only; tracking CSV stays at 7c938a6.
+- 05:30 hand-guiding re-run with damping [25, 25, 15, 3, 1.5, 0.05] (commit 9c82a09): drift at 2 s
+  0.28 / 0.0000 / 0.12 m/s and displacement 0.60 / 0.003 / 0.36 m for Δm -1 / 0 / +1 kg; the
+  release-acceleration hold force degraded to -9.6 / -0.96 / +7.9 N because with this damping the
+  wrist joints reach terminal speed inside the 40 ms fit window. Replaced by a static measurement
+  (converged PID hold torque minus hand-guiding g_model, through J^-T) and drift at 1 s
+  (commit 4e72685). First attempt failed on my bug (set the tracker's params before loading it,
+  fixed in the next commit — which also carries the 10 N GIF pushes, not mentioned in its message).
+- Lesson for the README: joint damping alone does not make a payload-model error safe; even
+  3x damping lets 1 kg of error carry the TCP tens of centimetres in 2 s.
+- 05:35 the static hold force showed a constant -2.4 N offset while the Δm = 0 arm did not drift
+  at all — contradictory. Raw dump (`/tmp/hg_debug.py`): at the first hand-guiding sample the
+  elbow already moved at 0.052 rad/s although the arm was still under the tracking controller.
+  Cause: `on_deactivate()` wrote zero effort and the hardware applied it for one 2 ms cycle
+  before the next controller's first update (25 N·m / 0.88 kg m² × 2 ms ≈ 0.057 rad/s). Fixed in
+  bd001f6: deactivation leaves the last torque; the speed-cap trip writes gravity + damping.
+  After the fix: hg[0] torque == hold torque, qd = 0; hold force -9.81 / 0.00 / +9.81 N.
+  Also fixed: both controller_state subscriptions fed one recording, so the outgoing
+  controller's samples leaked into the next recording (gave exactly 0 N).
+- 05:42 final hand-guiding CSV (commit bd001f6): drift at 1 s 374 / 0 / 202 mm/s, displacement
+  296 / 0 / 201 mm for Δm -1 / 0 / +1 kg. Tracking CSV unchanged (commit 7c938a6).

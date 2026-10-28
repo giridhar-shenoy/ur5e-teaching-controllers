@@ -35,6 +35,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Effort controllers no longer write zero torque on deactivation; doing so dropped the arm under
+  gravity for one cycle at every hand-over between controllers.
+- Runtime parameter changes are adopted without blocking the realtime loop and only as a whole
+  set with correctly sized per-joint arrays; trajectories with NaN/Inf, out-of-limit targets or
+  a stale start are rejected; trajectories are never freed in the realtime loop.
+- Simulated gravity set to 9.81 m/s² to match Pinocchio (SDF defaults to 9.8).
+- Hand-guiding damping raised so a payload-model error cannot carry the arm to the floor within
+  two seconds; the hand-guiding controller falls back to the tracking controller on a speed-cap
+  trip.
+
 - Work around two failures of the stock `ur_sim_control.launch.py` on Lyrical (no controller
   parameters reach the controllers; duplicate robot spawn when Gazebo boots slowly) in
   `sim.launch.py`.
