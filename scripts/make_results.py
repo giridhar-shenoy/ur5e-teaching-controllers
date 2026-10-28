@@ -359,6 +359,15 @@ def results_markdown(track_rows, hg_rows) -> tuple[str, str]:
             "[0.9, 1.0] s after release and the TCP displacement at 1 s (by 2 s a 1 kg error has",
             "carried the arm tens of centimetres, towards the floor when it sinks).",
             "",
+            "The hold force matches Δm·g to the printed precision because Gazebo (DART) and",
+            "Pinocchio are given the same URDF and the same gravity (9.81 m/s², set explicitly in",
+            "the world): the benchmark confirms that the payload model enters the dynamics at the",
+            "right place and that a hand-over between controllers is seamless. On a real arm this",
+            "is exactly where friction and model error would appear. Two earlier versions of this",
+            "benchmark showed offsets of −0.5 N and −2.4 N; both were artefacts (SDF's default",
+            "gravity of 9.8, and a controller that zeroed its torque on deactivation) and are",
+            "described in NOTES.md.",
+            "",
             "![handguide](assets/handguide_light.png)",
             "",
         ]
@@ -380,7 +389,8 @@ def headline(track_rows, hg_rows) -> str:
         f"{pm(worst_rmse[(speed, 0)], 1e3)} mrad), and in hand guiding a {actual - model:g} kg "
         f"payload-model error costs the operator {pm([r['hold_force_z_n'] for r in rs])} N "
         f"of vertical force to hold the arm still "
-        f"(Δm·g = {float(rs[0]['expected_hold_force_z_n']):.2f} N)."
+        f"(Δm·g = {float(rs[0]['expected_hold_force_z_n']):.2f} N) and, let go, carries the "
+        f"TCP {pm([r['drift_disp_1s_m'] for r in rs], 1e3, 0)} mm in one second."
     )
 
 
@@ -413,6 +423,7 @@ def main(argv=None) -> int:
     track_rows = read_csv(RESULTS / "tracking.csv")
     hg_rows = read_csv(RESULTS / "handguide.csv")
     full, summary = results_markdown(track_rows, hg_rows)
+    full = full.rstrip("\n")  # exactly one trailing newline, as end-of-file-fixer wants
     head_sentence = headline(track_rows, hg_rows)
     out = DOCS / "results.md"
     if args.check:
