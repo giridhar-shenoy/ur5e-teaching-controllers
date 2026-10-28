@@ -26,6 +26,16 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hand guiding holds still) and CI runs it on both backends.
 - `docs/what_broke.md` written (draft); README "Two dynamics backends" and a CPU-load item
   under "Where it fails".
+- Computed-torque law on the tracking controller (`control_law: pid_ff | computed_torque`,
+  `ct_omega`, `ct_zeta`; runtime-switchable, either backend), `test_computed_torque`
+  (closed loop against an exact-model plant), and a computed-torque leg in the smoke test.
+- `bench_tracking` runs PID, PID + RNEA FF and computed torque (`--variants`) and stamps the
+  dynamics backend; `make_results.py` renders whichever variants the CSV holds.
+- `TcpJogController` (mode `jog`): TCP twist on `~/twist` → damped least squares with
+  manipulability-scheduled damping, joint speed / acceleration / position limits as uniform
+  scalings, 0.1 s deadman, PID + RNEA joint loop on the integrated reference, `~/jog_state`
+  with sim-time stamps; `test_dls`, mock-hardware tests, `bench_jog` and a jog leg in the smoke
+  test.
 
 - Repository skeleton: MIT license, Lyrical Dockerfile and devcontainer, GitHub Actions CI that
   builds the image in the job and runs build, lint, tests, a results-consistency check and a
@@ -65,6 +75,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CI: `ur5e_teaching_bench` declares pytest through `extras_require`; the container's
   setuptools ignores `tests_require`, so colcon found no tests and CI failed.
 - `bench_camera.sdf` is well-formed XML (a `--` inside a comment).
+- The controller polls in `sim_session.sh` and `ci_smoke.sh` are bounded by `timeout 10`: an
+  orphaned poll once outlived its script and kept the machine-wide locks it had inherited.
 - Effort controllers no longer write zero torque on deactivation; doing so dropped the arm under
   gravity for one cycle at every hand-over between controllers.
 - Runtime parameter changes are adopted without blocking the realtime loop and only as a whole

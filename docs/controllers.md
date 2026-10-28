@@ -1,7 +1,8 @@
 # Controllers
 
-Both controllers are C++17 `ros2_control` plugins on the **effort** interface; the tracking
-controller has three control laws (PID, PID + RNEA feedforward, computed torque). All dynamics come
+All three controllers are C++17 `ros2_control` plugins on the **effort** interface: (a) joint
+trajectory tracking with three control laws (PID, PID + RNEA feedforward, computed torque), (b)
+gravity-compensated hand guiding, and (c) Cartesian TCP jogging with damped least squares. All dynamics come
 from the `robot_description` URDF through the `DynamicsModel` interface, implemented by Pinocchio
 (default) and orocos KDL (`dynamics_backend` parameter, see [below](#dynamics-backends)); no
 UR5e mass, length or inertia appears in controller code. The configured gains live in
@@ -99,15 +100,15 @@ job. Keeping the outer loop a pure PD also keeps the benchmark honest: the compu
 column shows what the model buys on its own, with nothing integrating the model's mistakes away.
 
 **What the benchmark shows** (table in [results.md](results.md)): both model-based laws beat
-PID by more than an order of magnitude. In Gazebo, though, computed torque comes out behind
-PID + feedforward at the same nominal bandwidth, even though both models are exact. I checked
-two explanations and the cause is still open (NOTES.md has the runs). The PID integral is not
-the reason: PID + feedforward without it does as well or better. An offline replica of the same
-path on an exact rigid-body plant with a 2 ms hold shows both laws an order of magnitude more
-accurate than in Gazebo, and computed torque degrading faster than PID + feedforward when an
-extra actuation delay is added. Computed torque feeds the measured state back through the whole
-inverse dynamics, so any lag or error in that state reaches the torque directly. What Gazebo
-adds on top of the replica is not identified.
+PID by more than an order of magnitude, and with exact models and the same nominal bandwidth
+they track the path about equally well when the machine is quiet. Under CPU contention they do
+not degrade equally. A check run while other sessions were compiling had computed torque about
+2× behind PID + feedforward on every joint (NOTES.md). An offline replica on an exact
+rigid-body plant with a 2 ms hold shows the same direction when an actuation delay is added:
+computed torque feeds the measured state back through the whole inverse dynamics, so any lag
+in that state reaches the torque directly, while PID + feedforward evaluates its model on the
+reference. The replica's errors are an order of magnitude below Gazebo's for both laws, so
+what Gazebo adds on top is not identified.
 
 **Saturation and anti-windup.** $\tau$ is clamped to the URDF effort limit times
 `effort_limit_scale`. The integral uses conditional integration: it is frozen whenever the
@@ -171,6 +172,47 @@ $J^{-T}$, and compares it with $\Delta m\,g$ (method in [results.md](results.md)
 interface: the last torque stays until the next controller writes. Writing zero there (the
 first version) dropped the arm under gravity for one 2 ms cycle at every switch, which the
 hand-guiding benchmark exposed as a 0.05 rad/s jolt at the elbow.
+
+## (c) TcpJogController — mode `jog`
+
+**Input.** `geometry_msgs/TwistStamped` on `~/twist`: the linear and angular velocity of
+`tip_frame` (tool0), expressed in the URDF root frame (`header.frame_id` empty or
+`command_frame`, default `world`; anything else is refused, not reinterpreted). Commands must keep
+coming: without one for `command_timeout` (0.1 s) the commanded twist is zero (deadman).
+
+**Inverse differential kinematics.** Each cycle, on the *reference* configuration $q_{des}$:
+
+$$
+\dot q = J^T \left(J J^T + \lambda^2 I\right)^{-1} v, \qquad
+\lambda^2 = \begin{cases} \lambda_{max}^2 \left(1 - (w/w_0)^2\right) & w < w_0 \\ 0 & w \ge w_0
+\end{cases}, \qquad w = \sqrt{\det J J^T}
+$$
+
+the damped least-squares solution with the damping scheduled on Yoshikawa's manipulability
+(Nakamura and Hanafusa; Chiaverini). Far from a singularity it is the exact inverse; near one
+it gives up some TCP accuracy to keep $\|\dot q\| \le \|v\| / (2\lambda)$ instead of
+letting the joint speeds blow up. On the UR5e $w$ is about 0.08 at home and 0.004 at
+`wrist_2_joint` = 0.05 rad (the wrist singularity is at 0); the shipped $w_0 = 0.02$ and
+$\lambda_{max} = 0.05$ bound the joint speed to 0.5 rad/s for a 5 cm/s command at the
+singularity itself. $J$ comes from the dynamics backend (either one), the 6×6 solve is
+fixed-size (LDLT), and nothing in the loop allocates.
+
+**Limits, in order, each as one scalar on the whole joint velocity** (so the TCP keeps moving in
+the commanded direction, only slower): the joint speed limits, the joint acceleration limits on
+the change of $\dot q$, and a stop `limit_margin` before any URDF position limit a joint is
+moving towards. The reference integrates the result, $q_{des} \mathrel{+}= \dot q\,\Delta t$,
+and the joint loop around it is the tracking controller's PID + RNEA feedforward on
+$(q_{des}, \dot q_{des}, \ddot q_{des})$. Integrating a reference instead of commanding joint
+velocities directly keeps the arm on the effort interface (there is no way back to position on
+gz_ros2_control 3.0.9, see the README) and means a deadman stop holds the pose it stopped at.
+
+**Output.** `~/controller_state` as for (a), plus `~/jog_state`
+(`std_msgs/Float64MultiArray`): `[t, t_cmd, w, λ, scale, v_cmd(6), v_meas(6)]`, where $t$ is the
+update time, $t_{cmd}$ the stamp of the command in use (both sim time in Gazebo, so latency can
+be measured without wall clocks), scale the product of the three limit scalings and
+$v_{meas} = J(q)\dot q$ from the measured state. `bench_jog` measures command-to-motion latency
+(to 50 % and 90 % of the commanded speed), velocity tracking while streaming, and the stop time
+after the last command.
 
 ## Dynamics backends
 
