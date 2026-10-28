@@ -3,8 +3,12 @@
 # and exit non-zero unless /joint_states shows the arm moved.
 #
 #   scripts/ci_smoke.sh                       # this repo's sim.launch.py (what CI runs)
+#   SMOKE_BACKEND=kdl scripts/ci_smoke.sh     # same, both effort controllers on orocos KDL
 #   SMOKE_TARGET=stock scripts/ci_smoke.sh    # stock ur_simulation_gz bringup, for comparison
 #
+# For this repo's bringup it then switches to mode track and has the effort tracking controller
+# follow a trajectory, switches to mode handguide and checks that the arm floats still, and checks
+# that both effort controllers were configured with the requested dynamics backend.
 # The stock bringup is known to be unreliable on Lyrical: its `ros_gz_sim create` can spawn the
 # robot twice when Gazebo is slow to start (see sim.launch.py docstring and NOTES.md).
 #
@@ -14,10 +18,16 @@ set -euo pipefail
 
 TIMEOUT_S="${SMOKE_TIMEOUT:-180}"
 TARGET="${SMOKE_TARGET:-teaching}"
+BACKEND="${SMOKE_BACKEND:-pinocchio}"
 LOG_DIR="${SMOKE_LOG_DIR:-/tmp/ur5e_teaching_smoke}"
 JOINTS=(shoulder_pan_joint shoulder_lift_joint elbow_joint wrist_1_joint wrist_2_joint wrist_3_joint)
 GOAL=(0.4 -1.2 0.6 -1.57 0.0 0.0)
 MIN_MOTION_RAD=0.2
+# Effort-tracking check: back to home under pid_ff_trajectory_controller.
+TRACK_GOAL=(0.0 -1.57 1.57 -1.57 -1.57 0.0)
+TRACK_TOL_RAD=0.01
+# Hand-guiding check: with the model payload equal to the actual one (0 kg) the arm must not move.
+HOLD_TOL_RAD=0.005
 
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-11}" GZ_PARTITION="${GZ_PARTITION:-r1}"
 mkdir -p "${LOG_DIR}"
@@ -35,7 +45,7 @@ deadline=$((start + TIMEOUT_S))
 
 if [ "${TARGET}" = "teaching" ]; then
   LAUNCH=(ros2 launch ur5e_teaching_bringup sim.launch.py gazebo_gui:=false launch_rviz:=false
-          initial_joint_controller:=joint_trajectory_controller)
+          initial_joint_controller:=joint_trajectory_controller "dynamics_backend:=${BACKEND}")
 else
   # Stock bringup with the stock controller config; the only change is the params_file pointer
   # that ros2_control 6.10.1 needs (see scripts/lib/inject_params_file.py).
@@ -87,6 +97,23 @@ read_positions() {
   timeout "$(remaining)" ros2 topic echo --once --field position /joint_states 2>/dev/null
 }
 
+# Six positions in JOINTS order (/joint_states is not in that order; map by name).
+read_ordered() {
+  timeout "$(remaining)" python3 "$(dirname "$0")/lib/joint_positions.py" 10
+}
+
+# max |a - b| over two space-separated lists of six positions
+max_diff() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+
+a, b = [float(x) for x in sys.argv[1].split()], [float(x) for x in sys.argv[2].split()]
+if len(a) != 6 or len(b) != 6:
+    sys.exit(f"[smoke] could not parse joint positions: {a} / {b}")
+print(f"{max(abs(x - y) for x, y in zip(a, b, strict=True)):.2e}")
+PY
+}
+
 before="$(read_positions)"
 echo "[smoke] positions before: ${before//$'\n'/ }"
 
@@ -135,6 +162,34 @@ if [ "${TARGET}" = "teaching" ]; then
       echo "[smoke] mode ${mode} did not leave ${expected} as the only joint controller"
       exit 4
     fi
+    case "${mode}" in
+      track)
+        track_list=$(IFS=,; echo "${TRACK_GOAL[*]}")
+        echo "[smoke] effort tracking: trajectory to ${track_list} in 3 s"
+        timeout "$(remaining)" ros2 topic pub --once -w 1 \
+          /pid_ff_trajectory_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \
+          "{joint_names: [${joint_list}], points: [{positions: [${track_list}], time_from_start: {sec: 3}}]}" \
+          >"${LOG_DIR}/track_pub.txt" 2>&1
+        sleep 5
+        err=$(max_diff "$(read_ordered)" "${TRACK_GOAL[*]}")
+        echo "[smoke] effort tracking: max |q - goal| = ${err} rad (tolerance ${TRACK_TOL_RAD})"
+        python3 -c "import sys; sys.exit(0 if ${err} <= ${TRACK_TOL_RAD} else 1)" || exit 5
+        ;;
+      handguide)
+        sleep 0.5
+        p0="$(read_ordered)"
+        sleep 1
+        drift=$(max_diff "$(read_ordered)" "${p0}")
+        echo "[smoke] hand guiding: max joint drift over 1 s = ${drift} rad (tolerance ${HOLD_TOL_RAD})"
+        python3 -c "import sys; sys.exit(0 if ${drift} <= ${HOLD_TOL_RAD} else 1)" || exit 6
+        ;;
+    esac
   done
+  configured=$(grep -c "dynamics backend: ${BACKEND}," "${LOG_DIR}/launch.log" || true)
+  echo "[smoke] effort controllers configured with the ${BACKEND} backend: ${configured}"
+  if [ "${configured}" -lt 2 ]; then
+    echo "[smoke] expected both effort controllers to report 'dynamics backend: ${BACKEND}'"
+    exit 7
+  fi
 fi
 echo "[smoke] PASS in $((SECONDS - start)) s"
