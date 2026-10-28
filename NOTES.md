@@ -179,6 +179,19 @@ then `source /opt/ros/lyrical/setup.bash` (and `install/setup.bash` after a buil
 - 05:42 final hand-guiding CSV (commit bd001f6): drift at 1 s 374 / 0 / 202 mm/s, displacement
   296 / 0 / 201 mm for Δm -1 / 0 / +1 kg. Tracking CSV unchanged (commit 7c938a6).
 
+### Time log (continued)
+
+- 05:53 final run at HEAD 26e5920 (clean): ci_smoke PASS 23 s (incl. track/handguide mode
+  check), `regenerate_all.sh` **436 s wall** (tracking 273 s, hand guiding 108 s, GIFs). All CSV
+  rows stamped 26e5920. Run-to-run: tracking FF worst-joint RMSE at 1x was 0.10 ± 0.07 mrad
+  (commit 7c938a6 run) vs 0.05 ± 0.02 (final); PID-only 8.82 vs 8.83 mrad. Hand guiding identical
+  to the bd001f6 run to the printed precision.
+- 05:55 acceptance: `ros2 launch ur5e_teaching_bringup sim.launch.py gazebo_gui:=false
+  launch_rviz:=false mode:=track` -> pid_ff_trajectory_controller active after 11 s, trajectory
+  followed, 22 s total (< 120 s).
+- 06:05 CHECKPOINT 4 written; MORNING.md STATUS written; pushed. No Gazebo or launch process
+  of this session left running (`ps -eo pid,args | grep r1/install` → none).
+
 ### Acceptance status (feature prompt, v0.1 scope) — verified tonight
 
 | Item | Status | Evidence |
@@ -223,16 +236,3 @@ hand-guiding damping and fallback).
    spawn) reported upstream to Universal_Robots_ROS2_GZ_Simulation? I did not open any issue.
 7. gz_ros2_control 3.0.9 effort -> position switch leaves joints uncommanded (arm falls): worth
    an upstream issue once you have checked it against the current source?
-
-### Time log (continued)
-
-- 05:53 final run at HEAD 26e5920 (clean): ci_smoke PASS 23 s (incl. track/handguide mode
-  check), `regenerate_all.sh` **436 s wall** (tracking 273 s, hand guiding 108 s, GIFs). All CSV
-  rows stamped 26e5920. Run-to-run: tracking FF worst-joint RMSE at 1x was 0.10 ± 0.07 mrad
-  (commit 7c938a6 run) vs 0.05 ± 0.02 (final); PID-only 8.82 vs 8.83 mrad. Hand guiding identical
-  to the bd001f6 run to the printed precision.
-- 05:55 acceptance: `ros2 launch ur5e_teaching_bringup sim.launch.py gazebo_gui:=false
-  launch_rviz:=false mode:=track` -> pid_ff_trajectory_controller active after 11 s, trajectory
-  followed, 22 s total (< 120 s).
-- 06:05 CHECKPOINT 4 written; MORNING.md STATUS written; pushed. No Gazebo or launch process
-  of this session left running (`ps -eo pid,args | grep r1/install` → none).
