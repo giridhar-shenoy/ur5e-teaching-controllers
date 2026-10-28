@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Giridhar J Shenoy. MIT License.
 #include "ur5e_teaching_controllers/effort_controller_base.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
-#include "dynamics/pinocchio_model.hpp"
+#include "dynamics/dynamics_model.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 
 namespace ur5e_teaching_controllers
@@ -38,7 +39,9 @@ controller_interface::InterfaceConfiguration EffortControllerBase::state_interfa
 }
 
 bool EffortControllerBase::configure_common(
-  const std::vector<std::string> & joints, const std::string & tip_frame, int publish_decimation)
+  const std::vector<std::string> & joints, const std::string & tip_frame,
+  const std::string & dynamics_backend, double gravity_z, double payload_mass,
+  const std::vector<double> & payload_com, int publish_decimation)
 {
   joints_ = joints;
   const std::string & urdf = get_robot_description();
@@ -47,16 +50,36 @@ bool EffortControllerBase::configure_common(
     return false;
   }
   try {
-    model_ = std::make_unique<dynamics::PinocchioModel>(urdf, joints_, tip_frame);
+    prototype_ =
+      dynamics::make_dynamics_model(dynamics_backend, urdf, joints_, tip_frame, gravity_z);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "%s", e.what());
     return false;
   }
+  {
+    std::lock_guard<std::mutex> lock(models_mutex_);
+    models_.clear();
+    requested_com_.clear();  // forces the build below
+  }
+  pending_model_.set(PendingModel{});
+  request_payload(payload_mass, payload_com);
+  pending_model_.get([this](const PendingModel & pending) { model_ = pending.model; });
+  if (!model_) {
+    RCLCPP_ERROR(get_node()->get_logger(), "could not build the dynamics model");
+    return false;
+  }
+  RCLCPP_INFO(
+    get_node()->get_logger(), "dynamics backend: %s, gravity_z %.4f m/s^2", model_->backend(),
+    model_->gravity_z());
+
   const auto n = static_cast<Eigen::Index>(joints_.size());
   q_ = Eigen::VectorXd::Zero(n);
   qd_ = Eigen::VectorXd::Zero(n);
   tau_ = Eigen::VectorXd::Zero(n);
-  effort_limit_ = model_->effort_limits();
+  lower_limit_ = prototype_->lower_limits();
+  upper_limit_ = prototype_->upper_limits();
+  urdf_effort_limit_ = prototype_->effort_limits();
+  effort_limit_ = urdf_effort_limit_;
   for (Eigen::Index j = 0; j < effort_limit_.size(); ++j) {
     // Saturation treats a limit <= 0 as "no limit"; a joint without a URDF effort limit must not
     // silently end up unlimited.
@@ -82,6 +105,43 @@ bool EffortControllerBase::configure_common(
     point->effort.assign(size, std::numeric_limits<double>::quiet_NaN());
   }
   return true;
+}
+
+void EffortControllerBase::request_payload(
+  double payload_mass, const std::vector<double> & payload_com)
+{
+  std::lock_guard<std::mutex> lock(models_mutex_);
+  if (!prototype_ || (payload_mass == requested_mass_ && payload_com == requested_com_)) {
+    return;
+  }
+  std::shared_ptr<dynamics::DynamicsModel> next;
+  try {
+    next = prototype_->clone();
+    next->set_payload(
+      payload_mass, Eigen::Vector3d(payload_com.at(0), payload_com.at(1), payload_com.at(2)));
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(get_node()->get_logger(), "payload change rejected: %s", e.what());
+    return;
+  }
+  requested_mass_ = payload_mass;
+  requested_com_ = payload_com;
+  // Release models that neither the realtime loop nor the box still holds (use_count 1 = only
+  // this list). The loop only ever takes the model in the box, which is always the newest.
+  models_.erase(
+    std::remove_if(
+      models_.begin(), models_.end(), [](const auto & m) { return m.use_count() == 1; }),
+    models_.end());
+  models_.push_back(next);
+  pending_model_.set(PendingModel{std::move(next)});
+}
+
+void EffortControllerBase::adopt_pending_model()
+{
+  (void)pending_model_.try_get([this](const PendingModel & pending) {
+    if (pending.model && pending.model != model_) {
+      model_ = pending.model;  // reference counts only; models_ still owns the old one
+    }
+  });
 }
 
 bool EffortControllerBase::read_state()

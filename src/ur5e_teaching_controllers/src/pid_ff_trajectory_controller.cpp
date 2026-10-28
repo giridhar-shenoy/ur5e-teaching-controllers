@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 #include "control/control_laws.hpp"
-#include "dynamics/pinocchio_model.hpp"
+#include "dynamics/dynamics_model.hpp"
 #include "profiles/trapezoidal.hpp"
 #include "ur5e_teaching_controllers/pid_ff_trajectory_controller_parameters.hpp"
 
@@ -58,9 +58,16 @@ CallbackReturn PidFfTrajectoryController::on_configure(const rclcpp_lifecycle::S
     return CallbackReturn::ERROR;
   }
   staged_ = std::make_unique<pid_ff_trajectory_controller::Params>(*params_);
-  if (!configure_common(params_->joints, params_->tip_frame, params_->state_publish_decimation)) {
+  if (!configure_common(
+        params_->joints, params_->tip_frame, params_->dynamics_backend, params_->gravity_z,
+        params_->payload_mass, params_->payload_com, params_->state_publish_decimation)) {
     return CallbackReturn::ERROR;
   }
+  // Payload changes: the model is rebuilt here, in the parameter service's thread, and update()
+  // only swaps it in (see EffortControllerBase::request_payload).
+  param_listener_->setUserCallback([this](const pid_ff_trajectory_controller::Params & p) {
+    request_payload(p.payload_mass, p.payload_com);
+  });
   pid_.assign(n, control::Pid{});
   apply_params();
 
@@ -78,8 +85,9 @@ CallbackReturn PidFfTrajectoryController::on_configure(const rclcpp_lifecycle::S
     [this](const trajectory_msgs::msg::JointTrajectory & msg) { on_trajectory(msg); });
 
   RCLCPP_INFO(
-    get_node()->get_logger(), "configured: %zu joints, feedforward %s, model payload %.2f kg", n,
-    params_->feedforward ? "on" : "off", params_->payload_mass);
+    get_node()->get_logger(),
+    "configured: %zu joints, feedforward %s, model payload %.2f kg, %s dynamics", n,
+    params_->feedforward ? "on" : "off", params_->payload_mass, model_->backend());
   return CallbackReturn::SUCCESS;
 }
 
@@ -91,10 +99,7 @@ void PidFfTrajectoryController::apply_params()
     pid_[j].kd = params_->kd[j];
     pid_[j].i_clamp = params_->i_clamp[j];
   }
-  model_->set_payload(
-    params_->payload_mass,
-    Eigen::Vector3d(params_->payload_com[0], params_->payload_com[1], params_->payload_com[2]));
-  effort_limit_ = model_->effort_limits() * params_->effort_limit_scale;
+  effort_limit_ = urdf_effort_limit_ * params_->effort_limit_scale;
 }
 
 void PidFfTrajectoryController::on_trajectory(const trajectory_msgs::msg::JointTrajectory & msg)
@@ -121,8 +126,8 @@ void PidFfTrajectoryController::on_trajectory(const trajectory_msgs::msg::JointT
   }
   std::vector<std::vector<double>> waypoints;
   std::vector<double> times;
-  const auto & lower = model_->lower_limits();
-  const auto & upper = model_->upper_limits();
+  const auto & lower = lower_limit_;
+  const auto & upper = upper_limit_;
   for (const auto & point : msg.points) {
     if (point.positions.size() != msg.joint_names.size()) {
       RCLCPP_ERROR(get_node()->get_logger(), "trajectory rejected: point size mismatch");
@@ -166,6 +171,7 @@ void PidFfTrajectoryController::on_trajectory(const trajectory_msgs::msg::JointT
 
 CallbackReturn PidFfTrajectoryController::on_activate(const rclcpp_lifecycle::State &)
 {
+  adopt_pending_model();
   if (!read_state()) {
     RCLCPP_ERROR(get_node()->get_logger(), "cannot read joint state on activation");
     return CallbackReturn::ERROR;
@@ -202,13 +208,14 @@ return_type PidFfTrajectoryController::update(
   if (param_listener_->try_update_params(*staged_)) {
     if (per_joint_sizes_ok(*staged_)) {
       *params_ = *staged_;  // same-size vectors: copy-assignment does not allocate
-      apply_params();
+      apply_params();       // gains and torque limits; the payload arrives as a new model
     } else {
       RCLCPP_ERROR(
         get_node()->get_logger(), "parameter change rejected: per-joint array size != %zu",
         joints_.size());
     }
   }
+  adopt_pending_model();
   read_state();
 
   // Adopt a newly received trajectory (never blocks: try_get skips if the callback holds it).

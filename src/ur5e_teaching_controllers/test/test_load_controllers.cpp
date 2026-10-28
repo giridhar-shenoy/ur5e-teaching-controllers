@@ -63,7 +63,22 @@ std::string write_params_file()
     << "handguide:\n  ros__parameters:\n"
     << joints << "    payload_mass: 1.0\n"
     << "    damping: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]\n"
-    << "    limit_margin: 0.0\n";
+    << "    limit_margin: 0.0\n"
+    << "handguide_kdl:\n  ros__parameters:\n"
+    << joints << "    dynamics_backend: kdl\n"
+    << "    payload_mass: 1.0\n"
+    << "    damping: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]\n"
+    << "    limit_margin: 0.0\n"
+    << "track_kdl:\n  ros__parameters:\n"
+    << joints << "    dynamics_backend: kdl\n"
+    << "    kp: [600.0, 1200.0, 500.0, 30.0, 8.0, 0.5]\n"
+    << "    kd: [50.0, 100.0, 40.0, 1.5, 0.3, 0.02]\n"
+    << "    ki: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]\n"
+    << "    i_clamp: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]\n"
+    << "    max_velocity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]\n"
+    << "    max_acceleration: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0]\n"
+    << "bad_backend:\n  ros__parameters:\n"
+    << joints << "    dynamics_backend: rbdl\n";
   return path;
 }
 
@@ -85,6 +100,14 @@ protected:
     cm_->set_parameter(
       {"handguide.type", "ur5e_teaching_controllers/GravityCompHandGuidingController"});
     cm_->set_parameter({"handguide.params_file", params});
+    for (const char * name : {"handguide_kdl", "bad_backend"}) {
+      cm_->set_parameter(
+        {std::string(name) + ".type",
+         "ur5e_teaching_controllers/GravityCompHandGuidingController"});
+      cm_->set_parameter({std::string(name) + ".params_file", params});
+    }
+    cm_->set_parameter({"track_kdl.type", "ur5e_teaching_controllers/PidFfTrajectoryController"});
+    cm_->set_parameter({"track_kdl.params_file", params});
   }
 
   void TearDown() override { stop_loops(); }
@@ -382,4 +405,80 @@ TEST_F(LoadControllersTest, RuntimeParametersAreAdoptedOrRejectedAsAWhole)
   for (int j = 0; j < 6; ++j) {
     EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-9) << kJoints[j];
   }
+}
+
+// --- dynamics_backend: kdl -------------------------------------------------------------------
+// The KDL backend must give the controllers the same torques as Pinocchio (to the equivalence
+// test's 1e-6 N m), and a runtime payload change must reach the realtime loop on either backend
+// as a model rebuilt outside it.
+
+TEST_F(LoadControllersTest, KdlHandGuidingOutputsPinocchioGravityOnMockHardware)
+{
+  activate("handguide_kdl");
+  const StateMsg state = latest_state();
+  stop_loops();
+  const Eigen::VectorXd g = gravity_at(state, 1.0);
+  for (int j = 0; j < 6; ++j) {
+    EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-6) << kJoints[j];
+  }
+  EXPECT_GT(g.cwiseAbs().maxCoeff(), 1.0);
+}
+
+TEST_F(LoadControllersTest, KdlTrackingHoldOutputIsPinocchioGravity)
+{
+  activate("track_kdl");
+  const StateMsg state = latest_state();
+  stop_loops();
+  const Eigen::VectorXd g = gravity_at(state, 0.0);
+  for (int j = 0; j < 6; ++j) {
+    EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-6) << kJoints[j];
+  }
+}
+
+TEST_F(LoadControllersTest, RuntimePayloadChangeReachesThePinocchioLoop)
+{
+  activate("handguide");
+  auto controller = cm_->get_loaded_controllers()[0].c;
+  ASSERT_TRUE(controller->get_node()->set_parameter({"payload_mass", 0.0}).successful);
+  std::this_thread::sleep_for(100ms);
+  StateMsg state = latest_state();
+  Eigen::VectorXd g = gravity_at(state, 0.0);
+  for (int j = 0; j < 6; ++j) {
+    EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-9) << kJoints[j];
+  }
+  ASSERT_TRUE(controller->get_node()->set_parameter({"payload_mass", 2.5}).successful);
+  std::this_thread::sleep_for(100ms);
+  state = latest_state();
+  stop_loops();
+  g = gravity_at(state, 2.5);
+  for (int j = 0; j < 6; ++j) {
+    EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-9) << kJoints[j];
+  }
+}
+
+TEST_F(LoadControllersTest, RuntimePayloadChangeReachesTheKdlLoop)
+{
+  activate("handguide_kdl");
+  auto controller = cm_->get_loaded_controllers()[0].c;
+  ASSERT_TRUE(controller->get_node()->set_parameter({"payload_mass", 0.0}).successful);
+  std::this_thread::sleep_for(100ms);
+  StateMsg state = latest_state();
+  Eigen::VectorXd g = gravity_at(state, 0.0);
+  for (int j = 0; j < 6; ++j) {
+    EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-6) << kJoints[j];
+  }
+  ASSERT_TRUE(controller->get_node()->set_parameter({"payload_mass", 2.5}).successful);
+  std::this_thread::sleep_for(100ms);
+  state = latest_state();
+  stop_loops();
+  g = gravity_at(state, 2.5);
+  for (int j = 0; j < 6; ++j) {
+    EXPECT_NEAR(state.output.effort[static_cast<std::size_t>(j)], g[j], 1e-6) << kJoints[j];
+  }
+}
+
+TEST_F(LoadControllersTest, UnknownDynamicsBackendIsRejectedAtLoad)
+{
+  // one_of<> validation: the parameter listener refuses "rbdl", so on_init fails.
+  EXPECT_EQ(cm_->load_controller("bad_backend"), nullptr);
 }

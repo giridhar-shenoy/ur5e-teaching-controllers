@@ -12,6 +12,18 @@ pid_ff_trajectory_controller:
     default_value: "tool0"
     description: "Frame the model payload is attached to."
     read_only: true
+  dynamics_backend:
+    type: string
+    default_value: "pinocchio"
+    description: "Rigid-body dynamics library: pinocchio (default) or kdl (orocos KDL), both from robot_description."
+    read_only: true
+    validation:
+      one_of<>: [["pinocchio", "kdl"]]
+  gravity_z:
+    type: double
+    default_value: -9.81
+    description: "Gravity along the URDF root z axis [m/s^2]; must match the world's gravity (SDF default: -9.8)."
+    read_only: true
   kp:
     type: double_array
     default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
