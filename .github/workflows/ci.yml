@@ -70,3 +70,7 @@ jobs:
       - name: Smoke test (Gazebo server-only, physics only)
         run: >-
           $IN_CONTAINER "LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a scripts/ci_smoke.sh"
+
+      - name: Smoke test, KDL dynamics backend
+        run: >-
+          $IN_CONTAINER "SMOKE_BACKEND=kdl LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a scripts/ci_smoke.sh"
