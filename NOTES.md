@@ -234,3 +234,5 @@ hand-guiding damping and fallback).
 - 05:55 acceptance: `ros2 launch ur5e_teaching_bringup sim.launch.py gazebo_gui:=false
   launch_rviz:=false mode:=track` -> pid_ff_trajectory_controller active after 11 s, trajectory
   followed, 22 s total (< 120 s).
+- 06:05 CHECKPOINT 4 written; MORNING.md STATUS written; pushed. No Gazebo or launch process
+  of this session left running (`ps -eo pid,args | grep r1/install` → none).
