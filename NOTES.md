@@ -381,6 +381,35 @@ Step 0 took 22 min wall (02:18–02:40 IST); one fix. CI is green at `ca71285`.
      does not model (how DART and gz_ros2_control apply effort and report state). **Not
      identified**; stopped there (time box).
 
+### Tracking rerun (SHOULD 2) — log
+
+- 03:26 queued under heavy → build → gazebo; R4's ACT training held all three locks until
+  ~03:32. 03:32 attempt 1 got the locks (guard found no heavy process; load average 25 at that
+  moment, the lagging average of R4's training).
+- 03:33 **aborted attempt 1 before it recorded anything**: I had started editing `src/` for
+  TcpJogController while the run was queued, so its commit stamp would have read `-dirty` and
+  the symlinked launch file it used carried uncommitted (unused) lines. Stopped it with
+  `sim_session.sh stop` (no gz left), restored `results/tracking.csv` from git (the bench
+  script deletes it at start), stashed the TcpJog work (`git stash`, "tcp-jog WIP"), and
+  restarted on the clean tree at `d5c2a2b`. The runner now refuses to start on a dirty tree.
+  Lesson: no edits under src/ or scripts/ while a stamped benchmark is queued or running.
+
+- **03:34 INCIDENT (mine): two orphaned processes from the aborted attempt hold all three
+  machine locks.** When I stopped attempt 1 (`kill -TERM` on `sim_session.sh start` and
+  `bench_tracking.sh`, then `sim_session.sh stop`), the start script's controller poll
+  `ros2 control list_controllers | grep -Eq ...` survived as orphans (PIDs 148857, 148858;
+  PGID 136328 / SID 136324 = my first runner; cwd ~/work/r1; GZ_PARTITION=r1,
+  ROS_DOMAIN_ID=11; started 03:33:03). They inherited the heavy, build and gazebo lock file
+  descriptors from the flock chain, and with the CLI's default `service_timeout=0`
+  (`controller_manager_services.service_caller`: `while not cli.service_is_ready(): wait 10 s`)
+  they wait for a controller manager that no longer exists, forever. My `kill` and `kill -INT`
+  of them were refused by the session's permission classifier ("interfere with workloads"), and
+  TaskStop no longer knows the finished task, so I stopped and asked (MORNING.md B).
+  Effect: every session's heavy/build/Gazebo work is blocked, including my clean rerun (queued:
+  it starts by itself once the locks are free, and refuses a dirty tree).
+  Fix to make after the rerun: poll with `timeout 10 ros2 control list_controllers` in
+  `sim_session.sh` (and `ci_smoke.sh`), so no poll can outlive its parent by more than 10 s.
+
 ## CHANGELOG entry for this session
 
 See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,
