@@ -231,6 +231,52 @@ Hand-guiding rows were unchanged within their std in all three. The feedforward 
 about 3× under CPU contention (likely late controller cycles against wall-clock-timed inputs);
 worth a line in the README's "Where it fails" and a check of the controller's cycle timing.
 
+## Session 2 — 2026-10-29 (v0.2 sprint, started 02:18 IST)
+
+Environment: `export ROS_DOMAIN_ID=11 GZ_PARTITION=r1 MAKEFLAGS=-j4`; builds under
+`flock ~/work/.locks/build.lock`, Gazebo under `flock ~/work/.locks/gazebo.lock timeout <s>`.
+The repo is public (`gh repo view` → `"visibility":"PUBLIC"`), so Actions minutes are free and
+the first real CI run (40766406049) started at 20:47 UTC on 28 Oct.
+
+### Plan (SPRINT OVERRIDE v0.2)
+
+0. CI green: watch run 40766406049, read the logs, fix Dockerfile / ci.yml until green, record
+   every fix here. → CHECKPOINT 1.
+1. Abstract `dynamics::DynamicsModel` interface (gravity, rnea, nonlinear_effects, mass_matrix,
+   tip_jacobian, tip pose, URDF limits, payload) that `PinocchioModel` implements unchanged in
+   maths; factory `make_dynamics_model(backend, urdf, joints, tip, gravity_z)`.
+2. `KdlModel`: kdl_parser tree → chain `base_link → tool0`; ChainIdSolver_RNE (RNEA),
+   ChainDynParam (gravity, mass, Coriolis), ChainJntToJacSolver (Jacobian), FK for the tip pose;
+   gravity and Jacobian expressed in the URDF root frame like Pinocchio's; payload = last
+   segment inertia + cube payload, solvers rebuilt.
+3. Controllers (a) and (b): read-only params `dynamics_backend: pinocchio | kdl` (default
+   pinocchio) and `gravity_z` (default -9.81). Payload changes no longer touch the model inside
+   update(): the parameter listener's user callback (executor thread) builds a new model with the
+   new payload and hands it over through a `realtime_tools::RealtimeThreadSafeBox`; update() only
+   swaps a shared_ptr; old models are freed outside the loop.
+4. `test_dynamics_equivalence` (gtest): 200 random (q, qd, qdd) within limits × payload {0, 1} kg;
+   gravity and RNEA ≤ 1e-6 N m, M ≤ 1e-6, J ≤ 1e-9. Plus the existing Pinocchio identity tests
+   re-run on KDL, and the mock-hardware controller test with `dynamics_backend: kdl`.
+5. `bench_dynamics_timing` (C++ executable, no ROS graph): 100 000 gravity() and rnea() calls per
+   backend on pre-generated random states, per-call steady_clock timing, median / p95 µs and the
+   fraction of the 2 ms cycle; CSV `results/dynamics_timing.csv`; `scripts/bench_dynamics_timing.sh`
+   refuses to run while gz sim / colcon / training is running. CI: 1 000-call smoke only.
+6. Launch: `dynamics_backend:=kdl` on sim.launch.py / mode.launch.py; gravity_z in controllers.yaml
+   with a test that it equals the worlds' `<gravity>`. → CHECKPOINT 2 (ask before Gazebo).
+7. Docs: README "Two dynamics backends" + timing row + CPU-load "Where it fails" item + "v0.1
+   numbers were produced with the Pinocchio backend"; docs/results.md timing table;
+   docs/what_broke.md rewrite (DRAFT, 400–700 words); regenerate_all.sh refuses to start when
+   another heavy process runs; architecture.md / controllers.md backend notes; CHANGELOG.
+8. SHOULD: computed-torque law on controller (a) (`control_law: pid_ff | computed_torque`),
+   sim check → CHECKPOINT 3; bench_tracking 3 × 3 × 3 rerun (ask first, ~15 min) → CHECKPOINT 4.
+9. TcpJogController only if 8 is done by Friday evening.
+
+### Step 0 — CI on GitHub (first runs that actually execute)
+
+| Run | Result | Cause → fix |
+|---|---|---|
+| [40766406049](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40766406049) | lint ✓, image build ✓ (6 min 46 s, cold cache), rosdep ✓, colcon build ✓ (2 min 13 s), **colcon test ✗** | `ur5e_teaching_bench`: "Ran 0 tests … NO TESTS RAN", exit 5. The container's setuptools warns `Unknown distribution option: 'tests_require'` and colcon there no longer sees pytest as a test dependency, so it falls back to unittest, which finds none of the pytest-style tests. Locally (colcon-core 0.21.3) the same setup.py worked. Fix: declare `extras_require={"test": ["pytest"]}`, which colcon-core maps to test dependencies (`colcon_core/package_augmentation/python.py`, `extras_mapping`); locally `colcon test --packages-select ur5e_teaching_bench` → 3 tests, 0 failures. |
+
 ## CHANGELOG entry for this session
 
 See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,

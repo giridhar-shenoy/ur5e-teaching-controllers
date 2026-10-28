@@ -16,7 +16,7 @@ setup(
     maintainer_email="giridharjshenoy@gmail.com",
     description="Mode manager and benchmark drivers for the UR5e teaching controllers.",
     license="MIT",
-    tests_require=["pytest"],
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             "mode_manager = ur5e_teaching_bench.mode_manager:main",
