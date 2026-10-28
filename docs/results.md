@@ -9,11 +9,11 @@ Every number on this page is computed by `scripts/make_results.py` from the CSVs
 
 **Joint-space tracking** (PidFfTrajectoryController, 3-segment 6-joint path; worst joint per repetition, then mean ± std over repetitions):
 
-| Speed (× nominal) | PID: worst-joint RMSE (mrad) | PID + RNEA FF: worst-joint RMSE (mrad) | PID: worst max \|e\| (mrad) | PID + RNEA FF: worst max \|e\| (mrad) | Regenerate with |
-|---|---|---|---|---|---|
-| 0.5 | 5.35 ± 0.01 | 0.03 ± 0.01 | 11.90 ± 0.03 | 0.59 ± 0.12 | `scripts/bench_tracking.sh` |
-| 1 | 8.83 ± 0.01 | 0.04 ± 0.03 | 20.59 ± 0.03 | 1.22 ± 0.47 | `scripts/bench_tracking.sh` |
-| 2 | 10.70 ± 0.04 | 0.14 ± 0.05 | 26.07 ± 0.11 | 1.88 ± 0.01 | `scripts/bench_tracking.sh` |
+| Speed (× nominal) | PID: worst-joint RMSE (mrad) | PID + RNEA FF: worst-joint RMSE (mrad) | Computed torque: worst-joint RMSE (mrad) | PID: worst max \|e\| (mrad) | PID + RNEA FF: worst max \|e\| (mrad) | Computed torque: worst max \|e\| (mrad) | Regenerate with |
+|---|---|---|---|---|---|---|---|
+| 0.5 | 5.34 ± 0.00 | 0.08 ± 0.00 | 0.09 ± 0.01 | 12.03 ± 0.14 | 0.50 ± 0.00 | 0.60 ± 0.23 | `scripts/bench_tracking.sh` |
+| 1 | 8.81 ± 0.01 | 0.21 ± 0.03 | 0.21 ± 0.04 | 20.67 ± 0.04 | 0.94 ± 0.07 | 0.84 ± 0.07 | `scripts/bench_tracking.sh` |
+| 2 | 10.68 ± 0.04 | 0.37 ± 0.09 | 0.38 ± 0.09 | 26.45 ± 0.36 | 2.83 ± 1.00 | 2.52 ± 1.47 | `scripts/bench_tracking.sh` |
 
 **Hand guiding with a wrong payload model** (GravityCompHandGuidingController, model payload fixed, actual Gazebo payload varied; mean ± std over repetitions):
 
@@ -31,7 +31,7 @@ Every number on this page is computed by `scripts/make_results.py` from the CSVs
 
 ## Tracking — details
 
-`results/tracking.csv`: commit `c35e70c82023`, seed 1, physics step 0.001 s, controller update rate 500 Hz, dynamics backend pinocchio; 3 repetitions per condition.
+`results/tracking.csv`: commit `6bf35f463513`, seed 1, physics step 0.001 s, controller update rate 500 Hz, dynamics backend pinocchio; 3 repetitions per condition.
 
 Method: the arm is homed by the tracking controller itself (feedforward on) to a
 seeded random offset (≤ 0.05 rad per joint) from the home pose; for the PID-only
@@ -42,6 +42,10 @@ integral term. A 3-waypoint path (2.5 s per segment at 1×) is sent on
 `~/joint_trajectory`. The error is the controller's own `q_des − q` at 500 Hz,
 from trajectory start to 0.5 s after the last
 reference motion. "Worst joint" = the joint with the largest RMSE in that run.
+These rows replace v0.1's two-column table. Its PID + RNEA FF rows were several
+times lower; re-running the v0.1 code itself on 29 Oct reproduced this table's
+level, not its own, with no package changed in between (NOTES.md has the A/B), so
+the two tables should not be compared row by row.
 Whole-benchmark reruns reproduce the PID-only rows closely; the feedforward rows sit
 near the noise floor and vary more between reruns than the within-run std shows
 (the run log is in NOTES.md).
@@ -52,12 +56,15 @@ Per joint, RMSE / max |e| in mrad, mean ± std over repetitions:
 
 | Speed | Variant | shoulder_pan_joint RMSE / max (mrad) | shoulder_lift_joint RMSE / max (mrad) | elbow_joint RMSE / max (mrad) | wrist_1_joint RMSE / max (mrad) | wrist_2_joint RMSE / max (mrad) | wrist_3_joint RMSE / max (mrad) |
 |---|---|---|---|---|---|---|---|
-| 0.5 | PID | 0.16 ± 0.01 / 0.75 ± 0.14 | 1.00 ± 0.01 / 2.10 ± 0.02 | 0.08 ± 0.00 / 0.32 ± 0.08 | 1.24 ± 0.12 / 3.06 ± 0.34 | 5.35 ± 0.01 / 11.90 ± 0.03 | 0.03 ± 0.01 / 0.53 ± 0.06 |
-| 0.5 | PID + RNEA FF | 0.02 ± 0.01 / 0.46 ± 0.09 | 0.01 ± 0.00 / 0.21 ± 0.13 | 0.01 ± 0.00 / 0.28 ± 0.15 | 0.02 ± 0.00 / 0.34 ± 0.09 | 0.02 ± 0.01 / 0.47 ± 0.10 | 0.03 ± 0.01 / 0.59 ± 0.12 |
-| 1 | PID | 0.88 ± 0.04 / 2.69 ± 0.27 | 1.92 ± 0.01 / 4.04 ± 0.10 | 0.14 ± 0.00 / 0.52 ± 0.03 | 2.03 ± 0.23 / 4.84 ± 0.61 | 8.83 ± 0.01 / 20.59 ± 0.03 | 0.11 ± 0.00 / 1.00 ± 0.15 |
-| 1 | PID + RNEA FF | 0.04 ± 0.02 / 0.93 ± 0.41 | 0.02 ± 0.01 / 0.42 ± 0.43 | 0.02 ± 0.02 / 0.53 ± 0.51 | 0.03 ± 0.01 / 0.69 ± 0.28 | 0.04 ± 0.02 / 0.96 ± 0.45 | 0.04 ± 0.03 / 1.22 ± 0.47 |
-| 2 | PID | 4.60 ± 0.20 / 11.26 ± 0.87 | 3.65 ± 0.01 / 7.68 ± 0.14 | 0.41 ± 0.02 / 1.04 ± 0.06 | 2.85 ± 0.32 / 6.44 ± 0.95 | 10.70 ± 0.04 / 26.07 ± 0.11 | 0.50 ± 0.01 / 2.55 ± 0.84 |
-| 2 | PID + RNEA FF | 0.12 ± 0.03 / 1.45 ± 0.08 | 0.04 ± 0.01 / 0.48 ± 0.02 | 0.05 ± 0.01 / 0.60 ± 0.02 | 0.08 ± 0.02 / 1.07 ± 0.02 | 0.12 ± 0.04 / 1.51 ± 0.10 | 0.14 ± 0.05 / 1.88 ± 0.01 |
+| 0.5 | PID | 0.18 ± 0.02 / 0.96 ± 0.07 | 1.00 ± 0.01 / 2.07 ± 0.03 | 0.09 ± 0.01 / 0.27 ± 0.01 | 1.23 ± 0.12 / 3.13 ± 0.38 | 5.34 ± 0.00 / 12.03 ± 0.14 | 0.10 ± 0.03 / 0.53 ± 0.04 |
+| 0.5 | PID + RNEA FF | 0.06 ± 0.00 / 0.36 ± 0.01 | 0.02 ± 0.00 / 0.13 ± 0.01 | 0.03 ± 0.00 / 0.16 ± 0.02 | 0.05 ± 0.00 / 0.28 ± 0.00 | 0.07 ± 0.00 / 0.39 ± 0.01 | 0.08 ± 0.00 / 0.50 ± 0.00 |
+| 0.5 | Computed torque | 0.07 ± 0.00 / 0.45 ± 0.18 | 0.02 ± 0.00 / 0.12 ± 0.00 | 0.03 ± 0.00 / 0.15 ± 0.00 | 0.05 ± 0.00 / 0.34 ± 0.13 | 0.07 ± 0.00 / 0.43 ± 0.17 | 0.09 ± 0.01 / 0.60 ± 0.23 |
+| 1 | PID | 0.90 ± 0.04 / 3.13 ± 0.06 | 1.92 ± 0.01 / 4.16 ± 0.04 | 0.16 ± 0.01 / 0.51 ± 0.02 | 2.02 ± 0.22 / 4.92 ± 0.59 | 8.81 ± 0.01 / 20.67 ± 0.04 | 0.22 ± 0.02 / 1.56 ± 0.38 |
+| 1 | PID + RNEA FF | 0.16 ± 0.02 / 0.64 ± 0.03 | 0.05 ± 0.01 / 0.23 ± 0.01 | 0.06 ± 0.01 / 0.29 ± 0.01 | 0.12 ± 0.01 / 0.51 ± 0.03 | 0.16 ± 0.02 / 0.72 ± 0.08 | 0.21 ± 0.03 / 0.94 ± 0.07 |
+| 1 | Computed torque | 0.16 ± 0.03 / 0.62 ± 0.05 | 0.05 ± 0.01 / 0.27 ± 0.11 | 0.07 ± 0.01 / 0.34 ± 0.14 | 0.12 ± 0.02 / 0.48 ± 0.02 | 0.16 ± 0.03 / 0.59 ± 0.04 | 0.21 ± 0.04 / 0.84 ± 0.07 |
+| 2 | PID | 4.63 ± 0.21 / 11.62 ± 0.47 | 3.67 ± 0.01 / 7.81 ± 0.07 | 0.43 ± 0.01 / 1.07 ± 0.07 | 2.84 ± 0.31 / 6.68 ± 1.13 | 10.68 ± 0.04 / 26.45 ± 0.36 | 0.63 ± 0.05 / 3.57 ± 0.10 |
+| 2 | PID + RNEA FF | 0.28 ± 0.07 / 2.08 ± 0.83 | 0.09 ± 0.03 / 0.45 ± 0.05 | 0.11 ± 0.03 / 0.57 ± 0.06 | 0.21 ± 0.05 / 1.56 ± 0.58 | 0.29 ± 0.08 / 2.22 ± 0.47 | 0.37 ± 0.09 / 2.83 ± 1.00 |
+| 2 | Computed torque | 0.29 ± 0.07 / 1.90 ± 1.09 | 0.10 ± 0.02 / 0.63 ± 0.25 | 0.12 ± 0.02 / 0.80 ± 0.31 | 0.21 ± 0.05 / 1.43 ± 0.83 | 0.29 ± 0.07 / 1.80 ± 1.13 | 0.38 ± 0.09 / 2.52 ± 1.47 |
 
 ## Hand guiding — details
 

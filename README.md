@@ -4,8 +4,8 @@
 
 ![UR5e switching between trajectory tracking and gravity-compensated hand guiding in Gazebo](docs/assets/hero.gif)
 
-This is a set of ros2_control effort controllers for a simulated UR5e (ROS 2 Lyrical, Gazebo Jetty): joint-space PID tracking with Pinocchio RNEA feedforward, and gravity-compensated hand guiding with a runtime payload model. These are controllers I shipped on production 6-axis arms, rebuilt in public on a UR5e, with every dynamics term computed from the URDF instead of hand-tuned. <!-- headline:begin -->
-At 1× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE to 0.04 ± 0.03 mrad (PID alone: 8.83 ± 0.01 mrad), and in hand guiding a 1 kg payload-model error costs the operator 9.81 ± 0.00 N of vertical force to hold the arm still (Δm·g = 9.81 N) and, let go, carries the TCP 201 ± 4 mm in one second.
+This is a set of ros2_control effort controllers for a simulated UR5e (ROS 2 Lyrical, Gazebo Jetty): joint-space tracking with PID, PID + RNEA feedforward or computed torque on Pinocchio or KDL dynamics, gravity-compensated hand guiding with a runtime payload model, and damped-least-squares TCP jogging. These are controllers I shipped on production 6-axis arms, rebuilt in public on a UR5e, with every dynamics term computed from the URDF instead of hand-tuned. <!-- headline:begin -->
+At 1× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE to 0.21 ± 0.03 mrad (PID alone: 8.81 ± 0.01 mrad, computed torque 0.21 ± 0.04 mrad), and in hand guiding a 1 kg payload-model error costs the operator 9.81 ± 0.00 N of vertical force to hold the arm still (Δm·g = 9.81 N) and, let go, carries the TCP 201 ± 4 mm in one second.
 <!-- headline:end -->
 
 **Language split:** C++17 for everything in the 500 Hz control loop (controllers, the Pinocchio
@@ -41,8 +41,9 @@ figures and GIFs: `scripts/regenerate_all.sh`.
 
 | Mode | Controller | Claims | What it shows |
 |---|---|---|---|
-| `track` | `PidFfTrajectoryController` | `*/effort` | PID + anti-windup + RNEA feedforward on trapezoidal re-profiled trajectories |
+| `track` | `PidFfTrajectoryController` | `*/effort` | Trapezoidal re-profiled trajectories with one of three laws: PID with anti-windup, PID + RNEA feedforward, or computed torque (`control_law`) |
 | `handguide` | `GravityCompHandGuidingController` | `*/effort` | g(q) + C(q,q̇)q̇ − Dq̇, runtime payload, joint-limit repulsion, speed cap |
+| `jog` | `TcpJogController` | `*/effort` | TCP twist → damped least squares with manipulability-scheduled damping, speed/acceleration/position limits, deadman |
 
 ![track mode](docs/assets/mode_track.gif) ![hand-guiding mode](docs/assets/mode_handguide.gif)
 
@@ -56,11 +57,11 @@ and hand-guiding numbers were produced with the Pinocchio backend (the default).
 <!-- results:begin -->
 **Joint-space tracking** (PidFfTrajectoryController, 3-segment 6-joint path; worst joint per repetition, then mean ± std over repetitions):
 
-| Speed (× nominal) | PID: worst-joint RMSE (mrad) | PID + RNEA FF: worst-joint RMSE (mrad) | PID: worst max \|e\| (mrad) | PID + RNEA FF: worst max \|e\| (mrad) | Regenerate with |
-|---|---|---|---|---|---|
-| 0.5 | 5.35 ± 0.01 | 0.03 ± 0.01 | 11.90 ± 0.03 | 0.59 ± 0.12 | `scripts/bench_tracking.sh` |
-| 1 | 8.83 ± 0.01 | 0.04 ± 0.03 | 20.59 ± 0.03 | 1.22 ± 0.47 | `scripts/bench_tracking.sh` |
-| 2 | 10.70 ± 0.04 | 0.14 ± 0.05 | 26.07 ± 0.11 | 1.88 ± 0.01 | `scripts/bench_tracking.sh` |
+| Speed (× nominal) | PID: worst-joint RMSE (mrad) | PID + RNEA FF: worst-joint RMSE (mrad) | Computed torque: worst-joint RMSE (mrad) | PID: worst max \|e\| (mrad) | PID + RNEA FF: worst max \|e\| (mrad) | Computed torque: worst max \|e\| (mrad) | Regenerate with |
+|---|---|---|---|---|---|---|---|
+| 0.5 | 5.34 ± 0.00 | 0.08 ± 0.00 | 0.09 ± 0.01 | 12.03 ± 0.14 | 0.50 ± 0.00 | 0.60 ± 0.23 | `scripts/bench_tracking.sh` |
+| 1 | 8.81 ± 0.01 | 0.21 ± 0.03 | 0.21 ± 0.04 | 20.67 ± 0.04 | 0.94 ± 0.07 | 0.84 ± 0.07 | `scripts/bench_tracking.sh` |
+| 2 | 10.68 ± 0.04 | 0.37 ± 0.09 | 0.38 ± 0.09 | 26.45 ± 0.36 | 2.83 ± 1.00 | 2.52 ± 1.47 | `scripts/bench_tracking.sh` |
 
 **Hand guiding with a wrong payload model** (GravityCompHandGuidingController, model payload fixed, actual Gazebo payload varied; mean ± std over repetitions):
 
@@ -126,21 +127,31 @@ that means new solvers) and `update()` only swaps a pointer.
 5. **Without feedforward, PID sags first and tracks late.** The integrator has to build up the
    gravity torque before it can hold the arm, and during motion the inertial and Coriolis torques
    show up as tracking error; compare the PID-only and PID + RNEA columns above.
-6. **The wrist_3 loop is at the edge of what a 2 ms explicit loop allows.** Its joint-space
+6. **Computed torque buys nothing over PID + feedforward here, and is more fragile.** With exact
+   models and the same nominal bandwidth the two track about equally well on a quiet machine
+   (table above). Under CPU contention computed torque fell further behind (a check made while
+   other sessions compiled, NOTES.md). It feeds the measured state back through the whole
+   inverse dynamics, so lag in that state reaches the torque directly. On a real arm, where the
+   model is wrong, that trade would need measuring again.
+7. **The wrist_3 loop is at the edge of what a 2 ms explicit loop allows.** Its joint-space
    inertia is tiny (the last link plus whatever is bolted to the flange), so K_d·Δt/M must stay
    below one; its gains are tiny too, and a payload changes its dynamics more than any other
    joint's.
-7. **Gazebo's effort interface is kinder than a real arm's.** No joint friction, no gearbox
+8. **Gazebo's effort interface is kinder than a real arm's.** No joint friction, no gearbox
    compliance, no motor current limits or torque ripple, perfect torque tracking, and an exactly
    known model: the feedforward numbers here are an upper bound on what a real UR5e would give.
-8. **The feedforward tracking numbers depend on what else the machine is doing.** Run next to
+9. **The feedforward tracking numbers depend on what else the machine is doing.** Run next to
    another session's benchmark on the same laptop, the RNEA-feedforward rows came out clearly
    worse than when run alone, while the PID-only and hand-guiding rows did not move (the run
-   log, with the numbers, is in NOTES.md). I have not pinned down the cause; the controller runs inside the
-   physics step, so the suspect is the benchmark driver's wall-clock timing rather than the
-   control law. `scripts/regenerate_all.sh` therefore refuses to start while a simulator,
-   build, pip install or training run is active, and the published rows were made alone.
-9. **Trajectories stop at every waypoint, and pre-emption is abrupt.** The trapezoidal
+   log, with the numbers, is in NOTES.md). It is not only other benchmarks: the v0.1 table
+   showed PID + feedforward several times lower than the one above, and re-running the v0.1
+   code itself on 29 Oct reproduced the new level, not its own, with no package changed in
+   between. I have not pinned down the cause; gz_ros2_control runs the controller manager
+   inside the physics step, so the suspect is the ROS side (when commands are adopted, what is
+   recorded) rather than the control law. `scripts/regenerate_all.sh` refuses to start while a
+   simulator, build, pip install or training run is active, and the published rows were made
+   alone; treat the feedforward rows as a level, not a precise number.
+10. **Trajectories stop at every waypoint, and pre-emption is abrupt.** The trapezoidal
    re-profiling is rest-to-rest per segment (no blending), which is simple and exactly testable
    but slower than necessary. A new trajectory pre-empts the running one from the current
    desired position at zero velocity, so pre-empting at cruise speed steps the desired velocity
@@ -162,8 +173,8 @@ model error costs.
 
 ## What I'd do next
 
-1. Add the `TcpJogController` (damped least squares with manipulability-scheduled damping) and
-   measure its command-to-motion latency.
+1. Publish `bench_jog`'s command-to-motion latency for the `TcpJogController`, and add a
+   singularity-approach benchmark (damped vs undamped joint speeds).
 2. Add the admittance controller on the wrist F/T sensor, i.e. the hand-guiding law that would
    actually run on a real UR over RTDE.
 3. MPC for tracking: it needs a QP solved inside the 2 ms loop (a real-time-safe solver,
