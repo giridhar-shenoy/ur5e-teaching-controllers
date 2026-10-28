@@ -3,7 +3,9 @@
 ## STATUS (v0.2, 29 Oct 2026, overnight session) — IN PROGRESS
 
 This section is rewritten at the end of the session. Progress so far: CI green (CHECKPOINT 1),
-KDL backend + equivalence + timing done (CHECKPOINT 2); see CHECKPOINTS.md.
+KDL backend + equivalence + timing done (CHECKPOINT 2), computed torque done and checked in the
+sim (CHECKPOINT 3); see CHECKPOINTS.md. **Blocked since 03:34 by B below** (the three-column
+tracking rerun is queued behind it).
 
 ## WAITING FOR GIRI (v0.2)
 
@@ -18,6 +20,20 @@ KDL backend + equivalence + timing done (CHECKPOINT 2); see CHECKPOINTS.md.
   with `required_status_checks.contexts=["build-test"]`, `enforce_admins=false`,
   `required_pull_request_reviews=null`, `restrictions=null`). Or leave it off until Sunday's release.
 - **What it blocks**: nothing in the sprint.
+
+### B. URGENT: two orphaned processes of mine hold all three machine locks
+
+- **What**: PIDs 148857 (`ros2 control list_controllers`) and 148858 (`grep -Eq ...`), left
+  over when I stopped an aborted tracking-rerun attempt at 03:33. They inherited the
+  heavy/build/gazebo lock descriptors and wait forever for a controller manager that is gone.
+  Evidence: PGID 136328 and SID 136324 are my first runner's, cwd `~/work/r1`,
+  `GZ_PARTITION=r1`, `ROS_DOMAIN_ID=11`, started 03:33:03 (NOTES.md, 03:34 incident).
+- **Why it needs you**: the session's permission classifier refused my `kill` of them twice.
+- **Recommendation**: `kill 148857 148858` (check first with
+  `ps -o pid,pgid,sid,lstart,args -p 148857,148858`). Nothing else needs cleaning up; my queued
+  rerun then starts by itself.
+- **What it blocks**: every session's builds, Gazebo runs and heavy jobs; here, the tracking
+  rerun, CHECKPOINT 4 and the TcpJogController build.
 
 ### Resolved from the v0.1 list
 
