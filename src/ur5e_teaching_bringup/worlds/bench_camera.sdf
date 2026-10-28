@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <!--
   bench.sdf plus the Sensors system (ogre2) and a fixed world camera looking at the workspace,
-  used only by scripts/record_gifs.sh (gz sim -s -r --headless-rendering). Keep the rest of this
-  file identical to bench.sdf.
+  used only by scripts/record_gifs.sh (server-only gz sim with headless rendering). Keep the rest
+  of this file identical to bench.sdf.
 -->
 <sdf version="1.11">
   <world name="bench">
