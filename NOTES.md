@@ -410,6 +410,56 @@ Step 0 took 22 min wall (02:18–02:40 IST); one fix. CI is green at `ca71285`.
   Fix to make after the rerun: poll with `timeout 10 ros2 control list_controllers` in
   `sim_session.sh` (and `ci_smoke.sh`), so no poll can outlive its parent by more than 10 s.
 
+- ~03:39 the orphans were gone (not by me; I did not get permission to end them) and the queued
+  clean rerun ran at once: guard quiet, load average 1.21, 393 s wall, exit 0,
+  `results/tracking.csv` 162 rows, stamp `6bf35f463513` (a docs-only commit on top of
+  `d5c2a2b`; same src/scripts), backend pinocchio. Backup: `/tmp/r1_tracking_v02_rerun.csv`.
+- Rerun numbers, worst-joint RMSE at 1× per rep: PID 8.81 / 8.82 / 8.81 mrad (v0.1: 8.83),
+  PID + FF 0.233 / 0.180 / 0.215 mrad (v0.1: 0.04 ± 0.03), computed torque 0.236 / 0.165 /
+  0.235 mrad. Two consequences:
+  1. On a quiet machine computed torque ≈ PID + FF. The 2.2× gap at CHECKPOINT 3 came from a
+     check made while other sessions were compiling: the CPU-load sensitivity again, and
+     stronger for CT. The README / controllers.md text that says "CT tracks worse" is wrong
+     and must be corrected from the table.
+  2. PID + FF is 4–7× worse than v0.1 on every joint at every speed, proportional to each
+     joint's path amplitude (timing-like); PID-only is unchanged except wrist_3 (2×). Every
+     PID + FF run tonight is ≥ 0.13 mrad. Code diff of the pid_ff path shows nothing that
+     should change it. A/B in progress: v0.1 (`c35e70c`) built in a worktree at
+     `/tmp/r1_v01`, to be run with its own bench_tracking.sh under the same locks.
+- Not committed yet: the rerun CSV and its tables (waiting for the A/B), TcpJogController and
+  bench_jog (written, not yet built: R4's training holds the build lock 03:46–~04:31), the
+  `timeout 10` poll fix in sim_session.sh / ci_smoke.sh.
+
+- Verified (headers + strings of the 3.0.9 binary): gz_ros2_control's plugin implements
+  `ISystemPreUpdate` / `ISystemPostUpdate`, i.e. the controller manager's read/update/write run
+  synchronously inside Gazebo's step; ROS messaging is on a `MultiThreadedExecutor` thread. So
+  CPU load cannot change the control loop's timing per sim step; whatever makes the feedforward
+  rows load- and run-dependent enters through the ROS side (when trajectories / parameters are
+  adopted, what is published and recorded) or through the physics itself. Not resolved.
+
+- **04:20 A/B: the v0.1 code reproduces tonight's level, not its own published numbers.**
+  `git worktree add --detach /tmp/r1_v01 c35e70c`, built there, its own
+  `scripts/bench_tracking.sh` run under heavy → build → gazebo (guard quiet, load 3.80, 287 s
+  wall, `/tmp/r1_v01_tracking.csv`). Worst-joint RMSE in mrad, mean ± std over 3 reps:
+
+  | Run | PID 0.5× | PID 1× | PID 2× | PID+FF 0.5× | PID+FF 1× | PID+FF 2× | wrist_3 PID 1× |
+  |---|---|---|---|---|---|---|---|
+  | v0.1 published (`c35e70c`, 28 Oct midday) | 5.346 ± 0.006 | 8.828 ± 0.007 | 10.700 ± 0.036 | 0.027 ± 0.010 | 0.045 ± 0.028 | 0.141 ± 0.047 | 0.106 |
+  | v0.1 code re-run 29 Oct 04:20 | 5.338 ± 0.005 | 8.809 ± 0.007 | 10.680 ± 0.042 | 0.094 ± 0.018 | 0.242 ± 0.008 | 0.335 ± 0.046 | 0.228 |
+  | v0.2 rerun 29 Oct 03:39 (`6bf35f4`, published now) | 5.336 ± 0.002 | 8.812 ± 0.006 | 10.680 ± 0.044 | 0.085 ± 0.005 | 0.209 ± 0.027 | 0.368 ± 0.087 | 0.216 |
+
+  So no v0.2 regression: same code, same packages (`/var/log/dpkg.log`: the only install after
+  the v0.1 runs is an unrelated desktop app, `t3code`, at 13:58 on 28 Oct), several times
+  worse feedforward rows a day later. What differs is the machine's state (tonight: up to five
+  other agent sessions, their ACT training runs between ours, VS Code's cpptools indexer, a
+  browser; CPU governor `powersave`, platform profile `balanced`). The guard catches named
+  heavy processes, not this. Published: the v0.2 three-column table (approved), with the
+  README and results.md saying the two tables are not comparable row by row. The worktree is
+  left in place (`git worktree list`); `git worktree remove /tmp/r1_v01` when no longer needed.
+
+- 04:45 build with TcpJogController: 87 tests, 0 failures. 04:47 CHECKPOINT 4. Gazebo checks
+  of the jog controller queued behind R2's chain (holds the gazebo lock since 04:45).
+
 ## CHANGELOG entry for this session
 
 See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,

@@ -21,7 +21,11 @@ tracking rerun is queued behind it).
   `required_pull_request_reviews=null`, `restrictions=null`). Or leave it off until Sunday's release.
 - **What it blocks**: nothing in the sprint.
 
-### B. URGENT: two orphaned processes of mine hold all three machine locks
+### B. (RESOLVED ~03:39) two orphaned processes of mine held all three machine locks
+
+- They were gone by about 03:39 (I did not end them; I was not permitted to), and my queued
+  rerun ran right after. Kept here for the record; the fix (`timeout 10` on the controller
+  polls in `sim_session.sh` and `ci_smoke.sh`) is in this session's commits.
 
 - **What**: PIDs 148857 (`ros2 control list_controllers`) and 148858 (`grep -Eq ...`), left
   over when I stopped an aborted tracking-rerun attempt at 03:33. They inherited the
@@ -34,6 +38,16 @@ tracking rerun is queued behind it).
   rerun then starts by itself.
 - **What it blocks**: every session's builds, Gazebo runs and heavy jobs; here, the tracking
   rerun, CHECKPOINT 4 and the TcpJogController build.
+
+### C. Publishing `bench_jog` numbers
+
+- **What**: `TcpJogController` and `bench_jog` (command-to-motion latency to 50 % / 90 % of the
+  commanded TCP speed, velocity tracking, stop time after the deadman) exist and were checked
+  with a 1-rep run to /tmp. A published run (3 reps × 3 axes, about 4 min under the locks) is
+  not on tonight's approved list, so there is no jog row in the README.
+- **Recommendation**: approve `scripts/bench_jog.sh` (3 reps), then add it to
+  `regenerate_all.sh` and a jog table to `make_results.py`.
+- **What it blocks**: only the jog row in the results table.
 
 ### Resolved from the v0.1 list
 
