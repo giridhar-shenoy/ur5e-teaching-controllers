@@ -1,6 +1,7 @@
 # Controllers
 
-Both controllers are C++17 `ros2_control` plugins on the **effort** interface. All dynamics come
+Both controllers are C++17 `ros2_control` plugins on the **effort** interface; the tracking
+controller has three control laws (PID, PID + RNEA feedforward, computed torque). All dynamics come
 from the `robot_description` URDF through the `DynamicsModel` interface, implemented by Pinocchio
 (default) and orocos KDL (`dynamics_backend` parameter, see [below](#dynamics-backends)); no
 UR5e mass, length or inertia appears in controller code. The configured gains live in
@@ -34,24 +35,85 @@ and each stays inside its own $v_{max}, a_{max}$ (parameters). Segments are only
 never shortened. Waypoints are reached at rest (no via-point blending, a deliberate v0.1 choice:
 it keeps the profile closed-form and the unit tests exact).
 
-**Control law.**
+**Three control laws.** The same controller (same trajectory input, profiles, limits and
+state output) runs one of three laws, chosen by `control_law` and `feedforward` and switchable at
+runtime; `bench_tracking` compares them on one path. With $e = q_{des} - q$:
+
+| Variant | Parameters | Law |
+|---|---|---|
+| PID | `control_law: pid_ff`, `feedforward: false` | $\tau = K_p e + K_d \dot e + K_i \int e\,dt$ |
+| PID + RNEA FF | `control_law: pid_ff`, `feedforward: true` (default) | $\tau = K_p e + K_d \dot e + K_i \int e\,dt + \mathrm{RNEA}(q_{des}, \dot q_{des}, \ddot q_{des})$ |
+| Computed torque | `control_law: computed_torque` | $\tau = \mathrm{RNEA}(q, \dot q, \ddot q_{des} + K_p' e + K_d' \dot e)$ |
+
+Every model term comes out of one recursive Newton–Euler pass over the URDF's links, never from
+an explicit $M$ or $C$:
 
 $$
-\tau = K_p e + K_d \dot e + K_i \int e\,dt + \tau_{ff}, \qquad e = q_{des} - q,
-\qquad \tau_{ff} = \mathrm{RNEA}(q_{des}, \dot q_{des}, \ddot q_{des})
-= M(q_{des})\ddot q_{des} + C(q_{des},\dot q_{des})\dot q_{des} + g(q_{des}).
+\mathrm{RNEA}(q, \dot q, a) = \underbrace{M(q)\,a}_{\text{inertia}}
++ \underbrace{C(q,\dot q)\,\dot q}_{\text{Coriolis, centrifugal}}
++ \underbrace{g(q)}_{\text{gravity}}.
 $$
 
-The feedforward is evaluated on the *desired* state, so it is a pure function of the reference
-and does not feed measurement noise back. `feedforward:=false` turns it off for the comparison
-benchmark. The model payload (`payload_mass`, `payload_com`) is added to the tool body; a change
-arrives as a rebuilt model, as described for (b) below.
+The forward pass propagates each link's velocity and acceleration from the base (gravity enters
+as a base acceleration of $-g$), the backward pass sums each link's $m\,a$ and
+$I\dot\omega + \omega \times I\omega$ back to the joints, and a joint's torque is the
+projection of the wrench it carries onto its axis. The velocity products in the forward pass
+are the Coriolis and centrifugal terms. The model payload (`payload_mass`, `payload_com`) is
+just more inertia on the last link; a change arrives as a rebuilt model, as described for (b).
+
+*PID* is feedback only: the integrator has to build up the gravity torque before the arm holds
+its pose, and during motion the inertial and Coriolis torques show up as tracking error.
+
+*PID + RNEA feedforward* evaluates the model on the **desired** state, so the model supplies the
+torque the reference needs and the PID only corrects what the model gets wrong. Because it is a
+pure function of the reference, it feeds back no measurement noise. The feedback gains are fixed
+per joint and were tuned on the diagonal of $M(q)$ at one pose (below), so the stiffness the
+arm actually has varies with configuration and with the coupling the diagonal ignores.
+
+*Computed torque* (inverse dynamics control, as in Spong, Hutchinson and Vidyasagar, *Robot
+Modeling and Control*) evaluates the model on the **measured** state and feeds the error back
+inside it. If the model is exact, $M(q)\ddot q + C\dot q + g = \tau$ gives
+$\ddot q = \ddot q_{des} + K_p' e + K_d' \dot e$, i.e. for every joint
+
+$$
+\ddot e + K_d' \dot e + K_p' e = 0, \qquad K_p' = \omega^2,\ K_d' = 2\zeta\omega,
+$$
+
+decoupled from the others and independent of configuration and payload: the gains are in
+acceleration units and the model scales them by $M(q)$. `ct_omega` and `ct_zeta` set $\omega$
+and $\zeta$ per joint. The shipped $\omega$ = 20 rad/s (base three) and 30 rad/s (wrist) is
+the PID's design bandwidth, so the laws are compared at the same nominal stiffness. In the 2 ms
+explicit loop $K_d'\Delta t = 2\zeta\omega\Delta t \le 0.12$, and unlike the PID gains these
+do not have to shrink for the light wrist_3 link. The command is clamped to the same torque
+limits. The law lives in `src/control/computed_torque.hpp` so the controller and its
+closed-loop unit test (`test/test_computed_torque.cpp`, both backends, exact-model plant) run
+the same code.
+
+**Why computed torque has no integral term.** With an exact model, the linearised error
+dynamics above have no constant disturbance left for an integrator to remove, so an integral
+would only add a third pole, overshoot and windup under the torque limits. With a wrong model,
+what is left is $M^{-1}(q)\,\delta(q, \dot q, \ddot q)$, where $\delta$ is the torque error.
+That residual changes with configuration, velocity and acceleration, so an integrator in
+acceleration units only cancels it at rest, and the PID law's integrator already does that
+job. Keeping the outer loop a pure PD also keeps the benchmark honest: the computed-torque
+column shows what the model buys on its own, with nothing integrating the model's mistakes away.
+
+**What the benchmark shows** (table in [results.md](results.md)): both model-based laws beat
+PID by more than an order of magnitude. In Gazebo, though, computed torque comes out behind
+PID + feedforward at the same nominal bandwidth, even though both models are exact. I checked
+two explanations and the cause is still open (NOTES.md has the runs). The PID integral is not
+the reason: PID + feedforward without it does as well or better. An offline replica of the same
+path on an exact rigid-body plant with a 2 ms hold shows both laws an order of magnitude more
+accurate than in Gazebo, and computed torque degrading faster than PID + feedforward when an
+extra actuation delay is added. Computed torque feeds the measured state back through the whole
+inverse dynamics, so any lag or error in that state reaches the torque directly. What Gazebo
+adds on top of the replica is not identified.
 
 **Saturation and anti-windup.** $\tau$ is clamped to the URDF effort limit times
 `effort_limit_scale`. The integral uses conditional integration: it is frozen whenever the
 unsaturated command already exceeds the limit in the direction the error would push it, and
 $|K_i \int e|$ is clamped to `i_clamp`. Both behaviours are unit-tested
-(`test/test_control_laws.cpp`).
+(`test/test_control_laws.cpp`). Switching `control_law` resets the integrators.
 
 **Gains.** Critically damped PD per joint at ~20 rad/s (base) and ~30 rad/s (wrist) on the
 diagonal of $M(q)$ at the home pose: $K_p = M_{jj}\omega^2$, $K_d = 2M_{jj}\omega$. The wrist_3

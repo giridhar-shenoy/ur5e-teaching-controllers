@@ -356,6 +356,31 @@ Step 0 took 22 min wall (02:18–02:40 IST); one fix. CI is green at `ca71285`.
   41–89 s each; a slow 63 s bringup once while R2 compiled).
 - 03:08 CHECKPOINT 2.
 
+### Computed torque (SHOULD 1) — implementation notes and what the sim showed
+
+- Law: `tau = RNEA(q, qd, qdd_des + Kp e + Kd e_dot)`, Kp = w², Kd = 2ζw, per joint, URDF
+  torque limits, no integral; shipped w = [20, 20, 20, 30, 30, 30] rad/s, ζ = 1 (the PID's
+  design bandwidth from the controllers.yaml comment). `control_law` is runtime-switchable so
+  one sim session can run all three benchmark variants; switching resets the PID integrators.
+- Unit test bug I made and fixed before committing: the sinusoid test compared q_des(t) with the
+  plant state after the step (t + 2 ms), which alone is 2.4 mrad at 1.2 rad/s. Measured at the
+  sampling instant (as the controller and bench_tracking do) it is 9.5e-5 rad, the same as a
+  Python replica (`/tmp/r1_ct_diag.py`).
+- 03:13 short sim check (1 rep, 1×, Pinocchio, `/tmp/r1_ct_check.csv`, not published):
+  worst-joint RMSE / max |e| pid_ff 0.175 / 2.88 mrad, computed_torque 0.386 / 5.46 mrad.
+  CT is ~2.2× worse on every joint. Checked, in order:
+  1. Integral term? PID + FF with ki = 0 (`/tmp/r1_noki.csv`): 0.132 / 0.95 mrad, i.e. better
+     still. Not the integral.
+  2. Implementation? Offline replica of the same path and gains on an exact Pinocchio plant with
+     a 2 ms hold and 1 ms substeps (`/tmp/r1_ct_path.py`): PD+FF 0.007–0.020, CT 0.009–0.028 mrad
+     RMSE per joint. Both laws behave as expected and CT is only 1.2–2× PD+FF there.
+  3. Delay sensitivity? Same replica with 1 or 2 ms extra actuation delay: CT degrades faster
+     than PD+FF (ratio grows to 2–3×), because CT feeds the measured state back through the
+     whole inverse dynamics. Plausible part of the story, but the replica's errors stay 3–10×
+     below Gazebo's for both laws, so the main error source in Gazebo is something the replica
+     does not model (how DART and gz_ros2_control apply effort and report state). **Not
+     identified**; stopped there (time box).
+
 ## CHANGELOG entry for this session
 
 See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,
