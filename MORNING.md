@@ -1,11 +1,69 @@
 # MORNING — ur5e-teaching-controllers
 
-## STATUS (v0.2, 29 Oct 2026, overnight session) — IN PROGRESS
+## STATUS (v0.2, 29 Oct 2026, overnight session 02:18–05:20 IST)
 
-This section is rewritten at the end of the session. Progress so far: CI green (CHECKPOINT 1),
-KDL backend + equivalence + timing done (CHECKPOINT 2), computed torque done and checked in the
-sim (CHECKPOINT 3); see CHECKPOINTS.md. **Blocked since 03:34 by B below** (the three-column
-tracking rerun is queued behind it).
+**v0.2 MUST and SHOULD are done.** All three controllers run on either dynamics backend, the
+tracking table has three columns, and CI exercises everything in Gazebo on both backends.
+CI: green at `e72fa6d`,
+[run 40788849695](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40788849695)
+(87 tests, 0 failures, 0 skipped; smoke PASS on both backends, every effort controller incl.
+jog). The closing docs commit after it gets its own run; see the Actions tab.
+
+### Done (commit hashes)
+
+| What | Commits |
+|---|---|
+| CI green on GitHub (first runs that executed; pytest declaration fix) | `ca71285`, record `98fee7e` |
+| KDL backend behind a `DynamicsModel` interface, `gravity_z`, equivalence test (worst 4.3e-14 N·m vs 1e-6) | `af0002b` |
+| `dynamics_backend` param on the controllers, payload rebuilt outside the RT loop and swapped in | `adfd712` (+ `8e6917c` XML fix) |
+| `bench_dynamics_timing` + busy-machine guard for it and `regenerate_all.sh` | `96365ef`, data `81d0045` |
+| Smoke test drives every effort controller in Gazebo, CI runs it on both backends | `844830e` `f91e559` `e72fa6d`, CI fixes `8a5b682` `13020dd` |
+| Docs: two backends, what_broke.md (DRAFT, 688 words), three control laws | `81d0045` `ce9360e` `58b205f` `8b3a080` `763a7b9` |
+| Computed-torque law (SHOULD) + closed-loop tests on both backends | `6c17e77` |
+| Three-column tracking rerun (approved), README/results.md tables and figure | `781e63f`, data `8cc3ffe` |
+| TcpJogController (DLS, manipulability-scheduled damping, limits, deadman) + bench_jog | `c66be22` `d2509d4` |
+| Lock-holding orphan fix (`timeout 10` on controller polls) | `cd0cfa4` `e72fa6d` |
+| Checkpoints 1–4 | `98fee7e` `8949478` `8b3a080`/`d5c2a2b` `29fcdc5` |
+
+Headline numbers (all regenerable; Pinocchio backend):
+
+- Dynamics call cost, median / p95: Pinocchio g 0.538 / 0.740 µs, RNEA 0.887 / 1.123 µs; KDL g
+  1.678 / 1.748 µs, RNEA 1.702 / 2.155 µs; worst p95 0.11 % of the 2 ms cycle.
+- Tracking at 1×, worst-joint RMSE: PID 8.81 ± 0.01, PID + FF 0.21 ± 0.03, computed torque
+  0.21 ± 0.04 mrad.
+- Hand-guiding rows unchanged from v0.1.
+
+### Things worth knowing before you read the README
+
+1. **The PID + FF row went from 0.04 (v0.1) to 0.21 mrad, and it is not my code.** I rebuilt
+   the v0.1 commit in a worktree and re-ran its own benchmark the same night: 0.24 mrad. No
+   package changed in between. The feedforward rows depend on the machine's state in a way the
+   heavy-process guard does not catch (NOTES.md, A/B table). README and results.md say the
+   tables are not comparable row by row.
+2. **CHECKPOINT 3 said computed torque was 2.2× worse than PID + FF; that was wrong.** The
+   check ran while other sessions compiled; on the quiet rerun they are equal. Corrected
+   everywhere (README "Where it fails" 6, controllers.md, CHECKPOINTS.md).
+3. **I caused a 6-minute lock outage (03:33–03:39).** Stopping an aborted rerun left two
+   orphaned `ros2 control` polls holding all three machine locks; I was not permitted to kill
+   them and they went away on their own. Fixed so it cannot recur (`cd0cfa4`, `e72fa6d`).
+4. **CI's smoke failures tonight were DDS transport, not controllers** (a publisher that never
+   matched, one whose message was lost). CI now runs the container with host network and IPC
+   like the devcontainer; this is a fix by hypothesis (NOTES.md).
+
+### Blocked — decisions you need to make
+
+- A. Branch protection on `main` (recommendation below).
+- C. Publishing `bench_jog` numbers (not on tonight's approved list; checked with 1 rep:
+  17–18 ms to 50 % of a 5 cm/s command).
+- From v0.1, still open: #3 (README's real-UR / RTDE sentence).
+
+### Next three steps
+
+1. Approve or adjust A and C; if C, run `scripts/bench_jog.sh` and add the jog table.
+2. Edit `docs/what_broke.md` (DRAFT) and the README's "Two dynamics backends" paragraph into
+   your own words; check the claim "KDL's RNE solver is what I used on the production arms".
+3. Find what makes the feedforward rows machine-state dependent (start with recording when
+   each trajectory is adopted, in sim time, against when it was sent).
 
 ## WAITING FOR GIRI (v0.2)
 

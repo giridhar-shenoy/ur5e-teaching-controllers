@@ -18,7 +18,7 @@ collector, and nothing outside it needs C++.
 ```bash
 # in the devcontainer (.devcontainer/, ROS 2 Lyrical image) or on Ubuntu 26.04 + ROS 2 Lyrical:
 scripts/build.sh && source install/setup.bash
-ros2 launch ur5e_teaching_bringup sim.launch.py mode:=track      # headless; or mode:=handguide
+ros2 launch ur5e_teaching_bringup sim.launch.py mode:=track      # headless; or handguide / jog
 ```
 
 Then, in another shell:
@@ -33,6 +33,10 @@ ros2 launch ur5e_teaching_bringup mode.launch.py mode:=handguide
 ros2 topic pub --once /world/bench/wrench/persistent ros_gz_interfaces/msg/EntityWrench \
   "{entity: {name: 'ur::wrist_3_link', type: 3}, wrench: {force: {y: 8.0}}}"
 ros2 topic pub --once /world/bench/wrench/clear ros_gz_interfaces/msg/Entity "{name: 'ur::wrist_3_link', type: 3}"
+# jog: stream a TCP twist (base frame) faster than the 0.1 s deadman; Ctrl-C stops the arm
+ros2 launch ur5e_teaching_bringup mode.launch.py mode:=jog
+ros2 topic pub -r 50 /tcp_jog_controller/twist geometry_msgs/msg/TwistStamped \
+  "{header: {frame_id: world}, twist: {linear: {z: 0.05}}}"
 ```
 
 Everything is headless by default (`gazebo_gui:=true` for the Gazebo client); add

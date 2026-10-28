@@ -460,24 +460,76 @@ Step 0 took 22 min wall (02:18–02:40 IST); one fix. CI is green at `ca71285`.
 - 04:45 build with TcpJogController: 87 tests, 0 failures. 04:47 CHECKPOINT 4. Gazebo checks
   of the jog controller queued behind R2's chain (holds the gazebo lock since 04:45).
 
+- 04:53 CI [40786279797](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40786279797)
+  (checkpoint 4) **failed** in "Smoke test, KDL dynamics backend": the tracking controller never
+  logged "trajectory accepted" and the arm stayed at the previous goal (|q − goal| 1.57 rad);
+  the Pinocchio smoke in the same job passed, as did the KDL smoke locally three times. Cause
+  (most likely): `ros2 topic pub --once` exits 0.1 s after publishing and the reliable message
+  is lost on a loaded runner. Fix `fix(smoke)`: `--keep-alive 2`, the failed check prints the
+  publisher's output; checks and tolerances unchanged. Re-run: 40787316271.
+
+- 05:05 CI 40787316271 failed again, now in the Pinocchio smoke: `ros2 topic pub -w 1` never
+  matched the controller's subscription in 150 s (rc 124). Together with the previous failure
+  (matched, message lost) this looks like DDS transport in the container, not the controllers.
+  Fix: CI container with `--network host --ipc host` like the devcontainer (64 MB /dev/shm and
+  the bridge network were the differences); smoke publishes bounded and diagnosed. Hypothesis,
+  not proven.
+- 05:04–05:07 local Gazebo checks of the jog work (gazebo lock): smoke pinocchio PASS 68 s, kdl
+  PASS 66 s (jog moved 0.31 rad, then ≤ 2e-6 rad after the deadman); bench_jog REPS=1 to
+  `/tmp/r1_jog_check.csv` (not published): latency to 50 % / 90 % of 5 cm/s 17–18 / 27–31 ms,
+  tracking RMS 1.8–5.3 % of the command, stop 184–229 ms after the last command (0.1 s of it
+  is the deadman), min manipulability 0.059 (no damping active).
+
+- 05:18 CI [40788849695](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40788849695)
+  green at `e72fa6d` with host network/IPC: 87 tests, smoke PASS pinocchio 64 s, kdl 55 s,
+  jog leg included. 05:20 closing docs (MORNING STATUS, these notes, README jog example).
+  Session total: 3 h 02 min wall (02:18–05:20), about 1 h of it waiting for locks.
+
 ## CHANGELOG entry for this session
 
-See CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two controllers, Pinocchio wrapper,
-41 gtests, mode manager, two benchmarks, GIF pipeline, docs; Fixed: stock-launch workarounds,
-deactivation torque drop, RT-safe parameters and trajectory hand-off, gravity mismatch,
-hand-guiding damping and fallback).
+Session 1 (28 Oct, v0.1): see CHANGELOG.md `[Unreleased]` (Added: skeleton, bringup, two
+controllers, Pinocchio wrapper, 41 gtests, mode manager, two benchmarks, GIF pipeline, docs;
+Fixed: stock-launch workarounds, deactivation torque drop, RT-safe parameters and trajectory
+hand-off, gravity mismatch, hand-guiding damping and fallback).
+
+Session 2 (29 Oct, v0.2), also in CHANGELOG.md `[Unreleased]`:
+
+- Added: KDL dynamics backend behind `DynamicsModel`, `dynamics_backend` / `gravity_z`
+  parameters, `test_dynamics_equivalence`, `bench_dynamics_timing` + results, computed-torque
+  law + `test_computed_torque`, three-variant `bench_tracking` + rerun, `TcpJogController` +
+  `test_dls` + `bench_jog`, smoke test driving every effort controller on both backends in CI,
+  `heavy_processes.sh` guard, what_broke.md (draft).
+- Changed: payload changes build a new model outside the realtime loop and swap it in;
+  `regenerate_all.sh` takes heavy → build → gazebo locks and runs the timing first.
+- Fixed: pytest declaration (CI), `bench_camera.sdf` XML comment, unbounded controller polls,
+  one-shot smoke publishes, CI container network/IPC.
 
 ## Open questions for Giri
 
+Session 2 (new):
+
+1. Branch protection on `main` now that CI is green (MORNING A)?
+2. Publish `bench_jog` (MORNING C)? It is ready; only tonight's approval list kept it out.
+3. The README's "Two dynamics backends" paragraph says KDL's RNE solver is what you used on the
+   production arms (your brief's wording). Keep it as written?
+4. The feedforward tracking rows are machine-state dependent (A/B: same code 0.04 → 0.24 mrad
+   a day apart). Publish them as a level (as now), or invest in finding the mechanism first?
+5. `/tmp/r1_v01` is a git worktree of `c35e70c` I created for the A/B; remove it with
+   `git worktree remove /tmp/r1_v01` when you no longer need it (I did not delete anything).
+
+Session 1 (as written on 28 Oct; status on 29 Oct in brackets):
+
 1. CI: fix the Actions billing/spending limit, or make the repo public when ready (MORNING #1)?
+   [resolved: public, CI runs and is green]
 2. Commit author e-mail: resolved 28 Oct (history rewritten to `giridharjshenoy@gmail.com`).
 3. README "What transfers to a real UR": is "the stock driver gives position/velocity, not
-   torque" the claim you want, given newer PolyScope torque features?
-4. Hand-guiding damping [25, 25, 15, 3, 1.5, 0.05] is my choice (drift vs push effort).
+   torque" the claim you want, given newer PolyScope torque features? [open]
+4. Hand-guiding damping [25, 25, 15, 3, 1.5, 0.05] is my choice (drift vs push effort). [open]
 5. SHOULD (TcpJogController + bench_jog) was not started: the MUST's "CI green" item is not
    green (billing), and the sprint rule says SHOULD only after MUST is green. Start it once CI
-   runs?
+   runs? [done 29 Oct, `c66be22` `d2509d4`]
 6. Do you want the stock `ur_sim_control.launch.py` failures (no params on Lyrical, double
    spawn) reported upstream to Universal_Robots_ROS2_GZ_Simulation? I did not open any issue.
+   [open]
 7. gz_ros2_control 3.0.9 effort -> position switch leaves joints uncommanded (arm falls): worth
-   an upstream issue once you have checked it against the current source?
+   an upstream issue once you have checked it against the current source? [open]
