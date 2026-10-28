@@ -1,6 +1,33 @@
 # MORNING — ur5e-teaching-controllers
 
-## STATUS (2026-10-28 06:05 IST, end of overnight session)
+## STATUS (v0.2, 29 Oct 2026, overnight session) — IN PROGRESS
+
+This section is rewritten at the end of the session. Progress so far: CI green (CHECKPOINT 1),
+KDL backend + equivalence + timing done (CHECKPOINT 2); see CHECKPOINTS.md.
+
+## WAITING FOR GIRI (v0.2)
+
+### A. Branch protection on `main`
+
+- **What**: CI is green on `main` (run 40768154969), so the sprint's "do not enable branch
+  protection until CI is green" no longer blocks it. Enabling it was not approved for tonight.
+- **Why it needs you**: it is a repository setting (outward-facing), and the strict variants
+  would block this session's direct pushes to `main`.
+- **Recommendation**: protect `main` requiring the `build-test` status check, no required pull
+  request, admins allowed to bypass (`gh api -X PUT repos/giridhar-shenoy/ur5e-teaching-controllers/branches/main/protection`
+  with `required_status_checks.contexts=["build-test"]`, `enforce_admins=false`,
+  `required_pull_request_reviews=null`, `restrictions=null`). Or leave it off until Sunday's release.
+- **What it blocks**: nothing in the sprint.
+
+### Resolved from the v0.1 list
+
+- #1 CI billing: resolved by making the repository public (approved); CI runs and is green.
+
+---
+
+## v0.1 morning note (28 Oct 2026), kept as it was
+
+### STATUS (2026-10-28 06:05 IST, end of overnight session)
 
 **v0.1 MUST list: done and verified locally. CI: blocked by GitHub billing (needs you).**
 Repo: <https://github.com/giridhar-shenoy/ur5e-teaching-controllers> (PRIVATE), `main` at the
@@ -67,7 +94,7 @@ for one cycle at every hand-over (fixed); low joint damping let a 1 kg payload e
 arm to the floor in under 2 s (damping raised, still large drift — joint damping alone does not
 make a payload-model error safe).
 
-## WAITING FOR GIRI
+### WAITING FOR GIRI (v0.1)
 
 ### 1. GitHub Actions does not start on this private repo (billing)
 

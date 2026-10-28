@@ -428,3 +428,93 @@ Smoke test    [smoke] PASS in 23 s
   2 min 34 s with the GHA layer cache. This was the v0.1 item that could not be checked without Docker.
 - No test was skipped or weakened; the only change was how the Python package declares pytest.
 - Branch protection: not enabled (waiting for Giri, see the checkpoint message).
+
+## v0.2 CHECKPOINT 2 — KDL backend builds, both controllers run on KDL in the sim, equivalence passes (2026-10-29 03:08 IST)
+
+Wall-clock spent: 0 h 50 min (session start 02:18 IST). Overnight mode: not waiting here.
+
+### git status (before this checkpoint's commit)
+
+```text
+$ git status --short
+ M CHANGELOG.md
+ M NOTES.md
+$ git log --oneline 98fee7e..HEAD
+58b205f docs: write what_broke.md from this repository's findings (draft)
+ce9360e docs: document the dynamics interface, both backends and the payload swap
+81d0045 data: publish the dynamics timing and the two-backend README section
+844830e test(smoke): exercise both effort controllers in the sim, on both backends
+96365ef feat(bench): time gravity() and rnea() on both backends; refuse busy machines
+adfd712 feat(controllers): choose the dynamics backend per controller, swap payloads outside the loop
+8e6917c fix(bringup): make bench_camera.sdf well-formed XML
+af0002b feat(dynamics): add an orocos KDL backend behind a common dynamics interface
+```
+
+### Checklist
+
+- [x] **KDL backend builds** (`liborocos-kdl-dev` 1.5.2, `ros-lyrical-kdl-parser` 3.0.1,
+  `ros-lyrical-urdf` 2.13.2, all already installed; no new dependency)
+
+  ```text
+  $ flock ~/work/.locks/build.lock scripts/build.sh
+  Finished <<< ur5e_teaching_bench [20.1s]
+  Finished <<< ur5e_teaching_controllers [4min 4s]
+  Finished <<< ur5e_teaching_bringup [5.31s]
+  ```
+
+- [x] **Equivalence test passes, tolerances as briefed (1e-6 N·m, 1e-6, 1e-9), nothing loosened**
+
+  ```text
+  $ ./build/ur5e_teaching_controllers/test_dynamics_equivalence
+  [equivalence] payload 0.0 kg: max |pinocchio - kdl| gravity 2.13163e-14 N m, rnea 2.13163e-14 N m, nle 2.13163e-14 N m, M 3.55271e-15, J 3.33067e-16, p 2.22045e-16 m, R 4.44089e-16
+  [equivalence] payload 1.0 kg: max |pinocchio - kdl| gravity 2.13163e-14 N m, rnea 4.26326e-14 N m, nle 2.84217e-14 N m, M 4.44089e-15, J 3.33067e-16, p 2.22045e-16 m, R 4.44089e-16
+  [equivalence] payload 1.0 kg off-axis on ft_frame: max |pinocchio - kdl| gravity 1.42109e-14 N m, rnea 2.84217e-14 N m, nle 2.84217e-14 N m, M 3.55271e-15, J 3.33067e-16, p 2.22045e-16 m, R 4.44089e-16
+  [equivalence] gravity_z -9.8: max |pinocchio - kdl| gravity 1.42109e-14 N m, rnea 2.84217e-14 N m, nle 2.84217e-14 N m, M 3.55271e-15, J 3.33067e-16, p 2.22045e-16 m, R 4.44089e-16
+  [  PASSED  ] 9 tests.
+  ```
+
+  The backends agreed on the first build; there was no frame/axis/inertia bug to fix. The
+  conventions that had to line up are listed in NOTES.md ("KDL backend").
+
+- [x] **Both controllers run with `dynamics_backend:=kdl` in the sim** (short Gazebo check under
+  the gazebo lock; the smoke test now drives both effort controllers)
+
+  ```text
+  $ flock ~/work/.locks/gazebo.lock timeout 300 env SMOKE_BACKEND=kdl scripts/ci_smoke.sh
+  [smoke] controllers active after 28 s
+  [smoke] max joint displacement: 1.570 rad (threshold 0.2 rad)
+  [smoke] mode track: active = force_torque_sensor_broadcaster joint_state_broadcaster pid_ff_trajectory_controller
+  [smoke] effort tracking: trajectory to 0.0,-1.57,1.57,-1.57,-1.57,0.0 in 3 s
+  [smoke] effort tracking: max |q - goal| = 6.40e-08 rad (tolerance 0.01)
+  [smoke] mode handguide: active = force_torque_sensor_broadcaster gravity_comp_handguide_controller joint_state_broadcaster
+  [smoke] hand guiding: max joint drift over 1 s = 0.00e+00 rad (tolerance 0.005)
+  [smoke] effort controllers configured with the kdl backend: 2
+  [smoke] PASS in 54 s
+  launch.log: [pid_ff_trajectory_controller]: dynamics backend: kdl, gravity_z -9.8100 m/s^2
+  launch.log: [gravity_comp_handguide_controller]: dynamics backend: kdl, gravity_z -9.8100 m/s^2
+  $ pgrep -af '[b]in/gz sim' | grep r1 || echo "no r1 gz left"
+  no r1 gz left
+  ```
+
+  Same script with the default backend: PASS in 41 s. CI now runs both.
+
+- [x] **Full test suite**
+
+  ```text
+  $ colcon test && colcon test-result
+  Summary: 67 tests, 0 errors, 0 failures, 0 skipped
+  ```
+
+- [x] **Timing CSV** (MUST 3, done early): `results/dynamics_timing.csv` at `96365efa478c`; see
+  docs/results.md. Run under heavy → build → gazebo locks, guard found no heavy process.
+
+### What is left
+
+- Push and confirm CI green with the new KDL smoke step.
+- SHOULD: computed-torque control law on controller (a), sim check (CHECKPOINT 3), the
+  3 speeds × {pid, pid_ff, computed_torque} × 3 reps rerun (CHECKPOINT 4).
+- TcpJogController only after that.
+
+### Does Sunday 1 Nov hold?
+
+Yes. The MUST list is done except CI confirming the new commits; the SHOULD is next tonight.

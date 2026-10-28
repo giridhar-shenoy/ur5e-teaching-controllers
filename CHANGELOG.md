@@ -8,6 +8,25 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Second dynamics backend on orocos KDL (`KdlModel`: kdl_parser chain `base_link → tool0`,
+  `ChainIdSolver_RNE`, `ChainDynParam`, `ChainJntToJacSolver`) behind a common `DynamicsModel`
+  interface that `PinocchioModel` now implements; read-only `dynamics_backend`
+  (`pinocchio` | `kdl`, default `pinocchio`) and `gravity_z` (default −9.81) parameters on both
+  controllers; `sim.launch.py dynamics_backend:=kdl`.
+- `test_dynamics_equivalence`: both backends on 200 random states at 0 kg and 1 kg payload
+  (gravity and RNEA within 1e-6 N·m, M within 1e-6, J within 1e-9); KDL controller tests on
+  mock hardware; a test that the worlds' gravity equals `gravity_z`.
+- `bench_dynamics_timing` (C++) and `scripts/bench_dynamics_timing.sh`: per-call median / p95
+  of gravity() and rnea() on both backends and their share of the 2 ms cycle,
+  `results/dynamics_timing.csv`, a table in `docs/results.md` and a row in the README; CI runs
+  it as a 1 000-call smoke test.
+- `scripts/lib/heavy_processes.sh`: `regenerate_all.sh` and the timing benchmark refuse to
+  start next to a simulator, build, pip install or training run.
+- The smoke test now runs both effort controllers in Gazebo (tracking reaches its goal,
+  hand guiding holds still) and CI runs it on both backends.
+- `docs/what_broke.md` written (draft); README "Two dynamics backends" and a CPU-load item
+  under "Where it fails".
+
 - Repository skeleton: MIT license, Lyrical Dockerfile and devcontainer, GitHub Actions CI that
   builds the image in the job and runs build, lint, tests, a results-consistency check and a
   headless Gazebo smoke test; pre-commit with ruff, clang-format (ROS 2 style), yamllint and
@@ -33,8 +52,19 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Docs: README, `docs/results.md` (generated), `docs/architecture.md`, `docs/controllers.md`,
   `docs/what_broke.md` (draft).
 
+### Changed
+
+- A runtime payload change no longer modifies the model inside `update()`: a model with the new
+  payload is built in the parameter callback and swapped into the realtime loop through a
+  `RealtimeThreadSafeBox` (needed for KDL, whose solvers are rebuilt; same path for Pinocchio).
+- `regenerate_all.sh` takes the machine's heavy, build and gazebo locks, in that order, and
+  regenerates the timing table first.
+
 ### Fixed
 
+- CI: `ur5e_teaching_bench` declares pytest through `extras_require`; the container's
+  setuptools ignores `tests_require`, so colcon found no tests and CI failed.
+- `bench_camera.sdf` is well-formed XML (a `--` inside a comment).
 - Effort controllers no longer write zero torque on deactivation; doing so dropped the arm under
   gravity for one cycle at every hand-over between controllers.
 - Runtime parameter changes are adopted without blocking the realtime loop and only as a whole
