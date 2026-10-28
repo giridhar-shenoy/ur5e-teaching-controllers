@@ -7,6 +7,7 @@ def test_modes_map_to_the_effort_controllers():
     assert MODES == {
         "track": "pid_ff_trajectory_controller",
         "handguide": "gravity_comp_handguide_controller",
+        "jog": "tcp_jog_controller",
     }
 
 

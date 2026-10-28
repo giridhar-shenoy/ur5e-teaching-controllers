@@ -14,7 +14,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 BRINGUP = ROOT / "src" / "ur5e_teaching_bringup"
 CONTROLLERS = ROOT / "src" / "ur5e_teaching_controllers" / "config"
-EFFORT_CONTROLLERS = ("pid_ff_trajectory_controller", "gravity_comp_handguide_controller")
+EFFORT_CONTROLLERS = (
+    "pid_ff_trajectory_controller",
+    "gravity_comp_handguide_controller",
+    "tcp_jog_controller",
+)
 
 
 def world_gravity_z(path: Path) -> float:

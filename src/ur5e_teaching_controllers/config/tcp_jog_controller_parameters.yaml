@@ -1,0 +1,116 @@
+tcp_jog_controller:
+  joints:
+    type: string_array
+    default_value: []
+    description: "Joints in command order; must be the 6 DoFs of the robot_description."
+    read_only: true
+    validation:
+      not_empty<>: null
+      unique<>: null
+  tip_frame:
+    type: string
+    default_value: "tool0"
+    description: "Frame that is jogged; the twist is its velocity, expressed in the URDF root frame."
+    read_only: true
+  command_frame:
+    type: string
+    default_value: "world"
+    description: "The only header.frame_id accepted on ~/twist besides an empty one (the URDF root)."
+    read_only: true
+  dynamics_backend:
+    type: string
+    default_value: "pinocchio"
+    description: "Rigid-body dynamics library: pinocchio (default) or kdl (orocos KDL), both from robot_description."
+    read_only: true
+    validation:
+      one_of<>: [["pinocchio", "kdl"]]
+  gravity_z:
+    type: double
+    default_value: -9.81
+    description: "Gravity along the URDF root z axis [m/s^2]; must match the world's gravity (SDF default: -9.8)."
+    read_only: true
+  command_timeout:
+    type: double
+    default_value: 0.1
+    description: "Deadman: without a new twist for this long [s] the commanded twist is zero."
+    validation:
+      gt<>: [0.0]
+  manipulability_threshold:
+    type: double
+    default_value: 0.02
+    description: "w0: damping starts when sqrt(det(J J^T)) drops below this (UR5e home: ~0.08)."
+    validation:
+      gt_eq<>: [0.0]
+  max_damping:
+    type: double
+    default_value: 0.05
+    description: "lambda_max of the damped least squares; lambda^2 = lambda_max^2 (1 - (w/w0)^2)."
+    validation:
+      gt_eq<>: [0.0]
+  max_joint_velocity:
+    type: double_array
+    default_value: [1.0, 1.0, 1.0, 1.5, 1.5, 1.5]
+    description: "Joint speed limit [rad/s]; the whole joint velocity is scaled down to respect it."
+    validation:
+      lower_element_bounds<>: [0.001]
+  max_joint_acceleration:
+    type: double_array
+    default_value: [4.0, 4.0, 4.0, 6.0, 6.0, 6.0]
+    description: "Joint acceleration limit [rad/s^2] applied to changes of the joint velocity."
+    validation:
+      lower_element_bounds<>: [0.001]
+  limit_margin:
+    type: double
+    default_value: 0.1
+    description: "Jogging stops this far from a URDF position limit [rad]."
+    validation:
+      gt_eq<>: [0.0]
+  kp:
+    type: double_array
+    default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    description: "Joint-space PID around the integrated reference: proportional gain [N m / rad]."
+    validation:
+      lower_element_bounds<>: [0.0]
+  ki:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Integral gain [N m / (rad s)]."
+    validation:
+      lower_element_bounds<>: [0.0]
+  kd:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Derivative gain [N m s / rad]."
+    validation:
+      lower_element_bounds<>: [0.0]
+  i_clamp:
+    type: double_array
+    default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    description: "Anti-windup: bound on |ki * integral| per joint [N m]; 0 = unbounded."
+    validation:
+      lower_element_bounds<>: [0.0]
+  payload_mass:
+    type: double
+    default_value: 0.0
+    description: "Model payload mass [kg] used by the feedforward; can change while running."
+    validation:
+      gt_eq<>: [0.0]
+  payload_com:
+    type: double_array
+    default_value: [0.0, 0.0, 0.03]
+    description: "Model payload centre of mass in tip_frame [m]."
+    validation:
+      fixed_size<>: [3]
+  effort_limit_scale:
+    type: double
+    default_value: 1.0
+    description: "Torque saturation = scale * URDF effort limit."
+    validation:
+      gt<>: [0.0]
+      lt_eq<>: [1.0]
+  state_publish_decimation:
+    type: int
+    default_value: 1
+    description: "Publish ~/controller_state and ~/jog_state every N updates."
+    validation:
+      gt_eq<>: [1]

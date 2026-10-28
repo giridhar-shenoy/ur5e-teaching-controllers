@@ -3,7 +3,7 @@
 <package format="3">
   <name>ur5e_teaching_controllers</name>
   <version>0.1.0</version>
-  <description>ros2_control effort controllers with Pinocchio or orocos KDL dynamics: PID + RNEA feedforward trajectory tracking and gravity-compensated hand guiding.</description>
+  <description>ros2_control effort controllers with Pinocchio or orocos KDL dynamics: PID + RNEA feedforward or computed-torque trajectory tracking, gravity-compensated hand guiding and DLS TCP jogging.</description>
   <maintainer email="giridharjshenoy@gmail.com">Giridhar J Shenoy</maintainer>
   <license>MIT</license>
 
@@ -13,6 +13,7 @@
   <depend>controller_interface</depend>
   <depend>eigen</depend>
   <depend>generate_parameter_library</depend>
+  <depend>geometry_msgs</depend>
   <depend>hardware_interface</depend>
   <depend>kdl_parser</depend>
   <depend>orocos_kdl_vendor</depend>
@@ -21,6 +22,7 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>realtime_tools</depend>
+  <depend>std_msgs</depend>
   <depend>trajectory_msgs</depend>
   <depend>urdf</depend>
 

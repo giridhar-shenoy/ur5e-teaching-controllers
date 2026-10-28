@@ -6,6 +6,7 @@
 #   joint_trajectory_controller         -> <joint>/position   (stock, used for bringup and homing)
 #   pid_ff_trajectory_controller        -> <joint>/effort     (mode: track)
 #   gravity_comp_handguide_controller   -> <joint>/effort     (mode: handguide)
+#   tcp_jog_controller                  -> <joint>/effort     (mode: jog)
 controller_manager:
   ros__parameters:
     update_rate: 500  # Hz; gz_ros2_control runs at this rate on a 1 ms physics step
@@ -28,6 +29,9 @@ controller_manager:
       # activates the tracking controller, which holds the joints where they are instead of
       # leaving them limp. The fallback must be loaded and configured (mode_manager does that).
       fallback_controllers: [pid_ff_trajectory_controller]
+
+    tcp_jog_controller:
+      type: ur5e_teaching_controllers/TcpJogController
 
 force_torque_sensor_broadcaster:
   ros__parameters:
@@ -116,4 +120,34 @@ gravity_comp_handguide_controller:
     limit_margin: 0.2
     limit_stiffness: 50.0
     max_joint_velocity: [1.5, 1.5, 1.5, 2.0, 2.0, 2.0]
+    state_publish_decimation: 1
+
+# TCP jogging: damped least squares on J(q_des), damping scheduled on the manipulability
+# w = |det J| (UR5e home ~0.08; ~0.004 at wrist_2 = 0.05 rad). The joint-space loop around the
+# integrated reference uses the tracking controller's PD gains with a little integral.
+tcp_jog_controller:
+  ros__parameters:
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+    tip_frame: tool0
+    command_frame: world
+    dynamics_backend: pinocchio
+    gravity_z: -9.81
+    command_timeout: 0.1
+    manipulability_threshold: 0.02
+    max_damping: 0.05
+    max_joint_velocity: [1.0, 1.0, 1.0, 1.5, 1.5, 1.5]
+    max_joint_acceleration: [4.0, 4.0, 4.0, 6.0, 6.0, 6.0]
+    limit_margin: 0.1
+    kp: [600.0, 1200.0, 500.0, 30.0, 8.0, 0.5]
+    kd: [50.0, 100.0, 40.0, 1.5, 0.3, 0.02]
+    ki: [1200.0, 2400.0, 1000.0, 60.0, 16.0, 1.0]
+    i_clamp: [75.0, 75.0, 75.0, 14.0, 14.0, 14.0]
+    payload_mass: 0.0
+    payload_com: [0.0, 0.0, 0.03]
     state_publish_decimation: 1

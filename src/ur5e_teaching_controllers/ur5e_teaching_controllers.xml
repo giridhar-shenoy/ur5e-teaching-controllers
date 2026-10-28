@@ -9,4 +9,9 @@
          base_class_type="controller_interface::ControllerInterface">
     <description>Gravity-compensated hand guiding on effort with runtime payload, viscous damping, joint-limit repulsion and a speed cap.</description>
   </class>
+  <class name="ur5e_teaching_controllers/TcpJogController"
+         type="ur5e_teaching_controllers::TcpJogController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Cartesian TCP jogging on effort: damped least squares with manipulability-scheduled damping, joint speed/acceleration/position limits, deadman timeout.</description>
+  </class>
 </library>
