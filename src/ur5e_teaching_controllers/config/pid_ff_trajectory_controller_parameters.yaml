@@ -24,22 +24,40 @@ pid_ff_trajectory_controller:
     default_value: -9.81
     description: "Gravity along the URDF root z axis [m/s^2]; must match the world's gravity (SDF default: -9.8)."
     read_only: true
+  control_law:
+    type: string
+    default_value: "pid_ff"
+    description: "pid_ff (PID + optional RNEA feedforward) or computed_torque; can change at runtime."
+    validation:
+      one_of<>: [["pid_ff", "computed_torque"]]
+  ct_omega:
+    type: double_array
+    default_value: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
+    description: "Computed torque: closed-loop natural frequency per joint [rad/s]; Kp = w^2."
+    validation:
+      lower_element_bounds<>: [0.0]
+  ct_zeta:
+    type: double_array
+    default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    description: "Computed torque: damping ratio per joint; Kd = 2 zeta w."
+    validation:
+      lower_element_bounds<>: [0.0]
   kp:
     type: double_array
     default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    description: "Proportional gain per joint [N m / rad]."
+    description: "pid_ff law: proportional gain per joint [N m / rad]."
     validation:
       lower_element_bounds<>: [0.0]
   ki:
     type: double_array
     default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    description: "Integral gain per joint [N m / (rad s)]."
+    description: "pid_ff law: integral gain per joint [N m / (rad s)]."
     validation:
       lower_element_bounds<>: [0.0]
   kd:
     type: double_array
     default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    description: "Derivative gain per joint [N m s / rad]."
+    description: "pid_ff law: derivative gain per joint [N m s / rad]."
     validation:
       lower_element_bounds<>: [0.0]
   i_clamp:
@@ -63,7 +81,7 @@ pid_ff_trajectory_controller:
   feedforward:
     type: bool
     default_value: true
-    description: "Add tau_ff = RNEA(q_des, qd_des, qdd_des) from Pinocchio."
+    description: "pid_ff law: add tau_ff = RNEA(q_des, qd_des, qdd_des) from the dynamics backend."
   payload_mass:
     type: double
     default_value: 0.0

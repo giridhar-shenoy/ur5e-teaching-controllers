@@ -5,6 +5,7 @@
 #include <cmath>
 #include <unordered_map>
 
+#include "control/computed_torque.hpp"
 #include "control/control_laws.hpp"
 #include "dynamics/dynamics_model.hpp"
 #include "profiles/trapezoidal.hpp"
@@ -39,7 +40,9 @@ namespace
 bool per_joint_sizes_ok(const pid_ff_trajectory_controller::Params & p)
 {
   const std::size_t n = p.joints.size();
-  for (const auto * v : {&p.kp, &p.ki, &p.kd, &p.i_clamp, &p.max_velocity, &p.max_acceleration}) {
+  for (const auto * v :
+       {&p.kp, &p.ki, &p.kd, &p.i_clamp, &p.max_velocity, &p.max_acceleration, &p.ct_omega,
+        &p.ct_zeta}) {
     if (v->size() != n) {
       return false;
     }
@@ -69,9 +72,15 @@ CallbackReturn PidFfTrajectoryController::on_configure(const rclcpp_lifecycle::S
     request_payload(p.payload_mass, p.payload_com);
   });
   pid_.assign(n, control::Pid{});
+  const auto en = static_cast<Eigen::Index>(n);
+  ct_kp_ = Eigen::VectorXd::Zero(en);
+  ct_kd_ = Eigen::VectorXd::Zero(en);
+  ct_omega_ = Eigen::VectorXd::Zero(en);
+  ct_zeta_ = Eigen::VectorXd::Zero(en);
+  a_cmd_ = Eigen::VectorXd::Zero(en);
+  law_ = Law::kPidFf;
   apply_params();
 
-  const auto en = static_cast<Eigen::Index>(n);
   q_des_ = Eigen::VectorXd::Zero(en);
   qd_des_ = Eigen::VectorXd::Zero(en);
   qdd_des_ = Eigen::VectorXd::Zero(en);
@@ -86,8 +95,9 @@ CallbackReturn PidFfTrajectoryController::on_configure(const rclcpp_lifecycle::S
 
   RCLCPP_INFO(
     get_node()->get_logger(),
-    "configured: %zu joints, feedforward %s, model payload %.2f kg, %s dynamics", n,
-    params_->feedforward ? "on" : "off", params_->payload_mass, model_->backend());
+    "configured: %zu joints, control law %s, feedforward %s, model payload %.2f kg, %s dynamics", n,
+    params_->control_law.c_str(), params_->feedforward ? "on" : "off", params_->payload_mass,
+    model_->backend());
   return CallbackReturn::SUCCESS;
 }
 
@@ -98,8 +108,20 @@ void PidFfTrajectoryController::apply_params()
     pid_[j].ki = params_->ki[j];
     pid_[j].kd = params_->kd[j];
     pid_[j].i_clamp = params_->i_clamp[j];
+    ct_omega_[static_cast<Eigen::Index>(j)] = params_->ct_omega[j];
+    ct_zeta_[static_cast<Eigen::Index>(j)] = params_->ct_zeta[j];
   }
+  control::computed_torque_gains(ct_omega_, ct_zeta_, ct_kp_, ct_kd_);
   effort_limit_ = urdf_effort_limit_ * params_->effort_limit_scale;
+  const Law law = params_->control_law == "computed_torque" ? Law::kComputedTorque : Law::kPidFf;
+  if (law != law_) {
+    // The integral belongs to the PID law only; coming back to it starts from zero instead of
+    // from whatever it held when the other law took over.
+    for (auto & pid : pid_) {
+      pid.reset();
+    }
+    law_ = law;
+  }
 }
 
 void PidFfTrajectoryController::on_trajectory(const trajectory_msgs::msg::JointTrajectory & msg)
@@ -255,19 +277,30 @@ return_type PidFfTrajectoryController::update(
     }
   }
 
-  if (params_->feedforward) {
-    tau_ff_ = model_->rnea(q_des_, qd_des_, qdd_des_);
+  if (law_ == Law::kComputedTorque) {
+    // tau = RNEA(q, qd, qdd_des + Kp e + Kd e_dot) on the measured state; tau_ff_ receives the
+    // unsaturated model torque (published as reference.effort).
+    control::computed_torque(
+      *model_, q_, qd_, q_des_, qd_des_, qdd_des_, ct_kp_, ct_kd_, effort_limit_, a_cmd_, tau_ff_,
+      tau_);
   } else {
-    tau_ff_.setZero();
+    if (params_->feedforward) {
+      tau_ff_ = model_->rnea(q_des_, qd_des_, qdd_des_);
+    } else {
+      tau_ff_.setZero();
+    }
+    const double dt = std::max(period.seconds(), 1e-6);
+    for (std::size_t j = 0; j < pid_.size(); ++j) {
+      const auto e = static_cast<Eigen::Index>(j);
+      tau_[e] =
+        pid_[j].update(q_des_[e] - q_[e], qd_des_[e] - qd_[e], dt, tau_ff_[e], effort_limit_[e]);
+    }
   }
 
-  const double dt = std::max(period.seconds(), 1e-6);
   for (std::size_t j = 0; j < pid_.size(); ++j) {
     const auto e = static_cast<Eigen::Index>(j);
     const double err = q_des_[e] - q_[e];
     const double err_dot = qd_des_[e] - qd_[e];
-    tau_[e] = pid_[j].update(err, err_dot, dt, tau_ff_[e], effort_limit_[e]);
-
     msg_.reference.positions[j] = q_des_[e];
     msg_.reference.velocities[j] = qd_des_[e];
     msg_.reference.accelerations[j] = qdd_des_[e];
