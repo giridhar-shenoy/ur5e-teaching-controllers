@@ -519,9 +519,9 @@ af0002b feat(dynamics): add an orocos KDL backend behind a common dynamics inter
 
 Yes. The MUST list is done except CI confirming the new commits; the SHOULD is next tonight.
 
-## v0.2 CHECKPOINT 3 — timing CSV exists; computed torque tracks a trajectory in the sim (2026-10-29 03:36 IST)
+## v0.2 CHECKPOINT 3 — timing CSV exists; computed torque tracks a trajectory in the sim (2026-10-29 03:28 IST)
 
-Wall-clock spent: 1 h 18 min (session start 02:18 IST).
+Wall-clock spent: 1 h 10 min (session start 02:18 IST).
 
 ### git status (before this checkpoint's commit)
 
@@ -589,7 +589,7 @@ CI for checkpoint 2 (`8949478`):
 ### What is left
 
 - The 3 × 3 × 3 tracking rerun (approved, ~7–15 min): queued behind R4's training run, which
-  holds the heavy/build/gazebo locks (started 03:31).
+  holds the heavy/build/gazebo locks (started about 03:25).
 - README / results.md three-column tables (generated after the rerun), CHECKPOINT 4.
 - TcpJogController (allowed: computed torque is done before Friday evening). Running bench_jog
   for published numbers is not on tonight's approved list; it will go to WAITING FOR GIRI.
