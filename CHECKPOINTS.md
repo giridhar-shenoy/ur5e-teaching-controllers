@@ -56,12 +56,12 @@ D  src/.gitkeep
 
   ```text
   $ git log --format="%h %ad %s" --date=iso
-  400fa48 2026-10-28 03:47:05 +0530 test: add headless sim smoke test and run it in CI
-  2d6df0c 2026-10-28 03:47:05 +0530 feat(bringup): add UR5e teaching xacro, bench worlds and sim launch
-  9e269d6 2026-10-28 03:30:54 +0530 ci: build the Docker image in the job and run build/lint/test in it
-  0ca05be 2026-10-28 03:30:54 +0530 chore: add pre-commit with ruff, clang-format, yamllint, markdownlint
-  53484a9 2026-10-28 03:30:54 +0530 build: add Lyrical Dockerfile and devcontainer
-  616bc76 2026-10-28 03:30:54 +0530 chore: add repository skeleton
+  cd641e0 2026-10-28 03:47:05 +0530 test: add headless sim smoke test and run it in CI
+  afa1c67 2026-10-28 03:47:05 +0530 feat(bringup): add UR5e teaching xacro, bench worlds and sim launch
+  316b247 2026-10-28 03:30:54 +0530 ci: build the Docker image in the job and run build/lint/test in it
+  4daa9c9 2026-10-28 03:30:54 +0530 chore: add pre-commit with ruff, clang-format, yamllint, markdownlint
+  df00db9 2026-10-28 03:30:54 +0530 build: add Lyrical Dockerfile and devcontainer
+  caa7416 2026-10-28 03:30:54 +0530 chore: add repository skeleton
   ```
 
 - [x] **GitHub repo**: `gh repo create ur5e-teaching-controllers --private --source . --push`
@@ -117,7 +117,7 @@ Yes for everything except "CI green", which depends on the billing fix (WAITING 
 ## CHECKPOINT 2 — controllers (a) + (b) load, switch and move the arm headless (2026-10-28 04:50 IST)
 
 Wall-clock spent so far: 1 h 25 min. Evidence below is from runs at 04:00–04:30 in this session
-(commits `1aa8ff0` controllers, `975ac5b` mode manager / drivers).
+(commits `f0fa401` controllers, `8eb85e5` mode manager / drivers).
 
 ### git status
 
@@ -227,7 +227,7 @@ Wall-clock spent so far: 2 h 25 min.
 ```text
 $ git status --short
  M CHECKPOINTS.md
-(only this report is uncommitted; HEAD 524b35b)
+(only this report is uncommitted; HEAD 4d60334)
 ```
 
 ### CSVs
@@ -238,10 +238,10 @@ $ wc -l results/*.csv
   109 results/tracking.csv
   119 total
 $ cut -d, -f2-5 results/tracking.csv | sort -u
-7c938a6a6344,0.001,500,1
+e05757de9ac9,0.001,500,1
 git_commit,sim_step_s,update_rate_hz,seed
 $ cut -d, -f2-5 results/handguide.csv | sort -u
-bd001f60c69b,0.001,500,1
+6309d051414d,0.001,500,1
 git_commit,sim_step_s,update_rate_hz,seed
 ```
 
@@ -296,7 +296,7 @@ Yes, apart from CI (needs the billing fix).
 
 ## CHECKPOINT 4 — final (2026-10-28 06:00 IST)
 
-Wall-clock spent: 2 h 35 min (03:25–06:00 IST). HEAD before this report: `28eef56`.
+Wall-clock spent: 2 h 35 min (03:25–06:00 IST). HEAD before this report: `035288a`.
 
 ### git status
 
@@ -375,7 +375,7 @@ $ git log --oneline | wc -l
 ### Other acceptance lines
 
 - `scripts/regenerate_all.sh` end to end: 489 s, 438 s and 436 s wall in three full runs
-  (< 60 min). Final run at clean commit 26e5920; every CSV row carries that hash and seed 1.
+  (< 60 min). Final run at clean commit cd02385; every CSV row carries that hash and seed 1.
 - No hard-coded UR5e dynamics: `grep -rnE "8\.058|3\.761|0\.425|0\.392|2\.846" src
   --include=*.cpp --include=*.hpp | wc -l` → 0; all from robot_description via Pinocchio.
 - THIRD_PARTY.md: `.clang-format` only; no third-party code was copied.
