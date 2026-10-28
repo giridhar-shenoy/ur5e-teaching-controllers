@@ -1,7 +1,8 @@
 # Controllers
 
 Both controllers are C++17 `ros2_control` plugins on the **effort** interface. All dynamics come
-from the `robot_description` URDF through Pinocchio (`src/dynamics/pinocchio_model.cpp`); no
+from the `robot_description` URDF through the `DynamicsModel` interface, implemented by Pinocchio
+(default) and orocos KDL (`dynamics_backend` parameter, see [below](#dynamics-backends)); no
 UR5e mass, length or inertia appears in controller code. The configured gains live in
 `src/ur5e_teaching_bringup/config/controllers.yaml`.
 
@@ -43,7 +44,8 @@ $$
 
 The feedforward is evaluated on the *desired* state, so it is a pure function of the reference
 and does not feed measurement noise back. `feedforward:=false` turns it off for the comparison
-benchmark. The model payload (`payload_mass`, `payload_com`) is added to the tool body.
+benchmark. The model payload (`payload_mass`, `payload_com`) is added to the tool body; a change
+arrives as a rebuilt model, as described for (b) below.
 
 **Saturation and anti-windup.** $\tau$ is clamped to the URDF effort limit times
 `effort_limit_scale`. The integral uses conditional integration: it is frozen whenever the
@@ -65,23 +67,31 @@ $$
 $$
 
 with hats marking model quantities that include the *configured* payload. The Coriolis term is
-optional (`coriolis_compensation`, computed with Pinocchio's `nonLinearEffects`). $D$ is a
+optional (`coriolis_compensation`; the backend's $C\dot q + g$: Pinocchio's `nonLinearEffects`,
+or KDL's `ChainDynParam::JntToCoriolis` plus `JntToGravity`). $D$ is a
 diagonal viscous damping for stability and feel. The friction hook
 $\tau_{fric} = F_v\dot q + F_c\tanh(\dot q / 0.01)$ is zero by default because Gazebo joints
 have no friction; on a real arm it is where identified friction goes.
 
 **Runtime payload.** `payload_mass` and `payload_com` can be set while the controller runs
-(`ros2 param set`). The new values are pushed into the inertia of the body that carries
-`tool0` (payload = solid 6 cm cube, CoM 3 cm along tool z by default, the same shape and place
-as the Gazebo payload link), so $\hat g$ and $\hat C$ change on the next cycle. Runtime
-parameter changes are picked up without blocking (`try_update_params`) and adopted only as a
-whole set whose per-joint arrays still have one entry per joint.
+(`ros2 param set`). The payload is a solid 6 cm cube, CoM 3 cm along tool z by default, the same
+shape and place as the Gazebo payload link. The model is never changed inside `update()`: the
+parameter listener's user callback (the executor thread that serves `set_parameters`) clones the
+payload-free model, adds the payload to the body that carries `tool0` (KDL: the last chain
+segment, after which its solvers are rebuilt) and queues the finished model in a
+`realtime_tools::RealtimeThreadSafeBox`. `update()` takes it with a non-blocking `try_get` and
+swaps a `shared_ptr`; replaced models stay referenced on the non-realtime side and are released
+there, so the loop never allocates, rebuilds or frees a model. $\hat g$ and $\hat C$ change on
+the first cycle after the model is ready. The other runtime parameters are picked up without
+blocking (`try_update_params`) and adopted only as a whole set whose per-joint arrays still have
+one entry per joint.
 
 **What the operator feels.** With a perfect model the arm floats and a push $F$ at the tool
 moves it against the damping only. With a payload error $\Delta m = m_{actual} - m_{model}$ the
 arm sinks ($\Delta m > 0$) or rises ($\Delta m < 0$), and holding it still costs a force of
-$\Delta m\,g$ at the payload. `bench_handguide` measures exactly that force from the
-release acceleration ($F = -J^{-T} M \ddot q$) and compares it with $\Delta m\,g$.
+$\Delta m\,g$ at the payload. `bench_handguide` measures that force statically, as the
+converged tracking controller's hold torque minus the hand-guiding model torque mapped through
+$J^{-T}$, and compares it with $\Delta m\,g$ (method in [results.md](results.md)).
 
 **Safety.**
 
@@ -100,12 +110,57 @@ interface: the last torque stays until the next controller writes. Writing zero 
 first version) dropped the arm under gravity for one 2 ms cycle at every switch, which the
 hand-guiding benchmark exposed as a 0.05 rad/s jolt at the elbow.
 
-## Dynamics wrapper — `PinocchioModel`
+## Dynamics backends
 
-Thin layer over Pinocchio 4.1: `buildModelFromXML(robot_description)`, a map from the
-controller's joint order to Pinocchio's, and allocation-free `gravity`, `rnea`,
-`nonlinear_effects`, `mass_matrix`, `tip_jacobian` (LOCAL_WORLD_ALIGNED, rows
-[linear; angular]) and `set_payload`. It is tested against identities that must hold for any
-rigid-body model (`test/test_pinocchio_model.cpp`): $g = \mathrm{RNEA}(q,0,0)$,
+`src/dynamics/dynamics_model.hpp` is the interface the controllers use: `gravity`, `rnea`,
+`nonlinear_effects`, `mass_matrix`, `tip_jacobian` (rows [linear; angular], reference point at
+the tip, URDF-root orientation, i.e. Pinocchio's `LOCAL_WORLD_ALIGNED`), the tip pose, the URDF
+limits and `set_payload`. Every query is allocation-free and writes into buffers sized at
+construction; `set_payload` and `clone` may allocate and only run outside the loop.
+
+| | Pinocchio (`pinocchio`, default) | orocos KDL (`kdl`) |
+|---|---|---|
+| Model | `buildModelFromXML`, whole URDF | `kdl_parser` tree, chain `base_link → tool0` |
+| $g(q)$ | `computeGeneralizedGravity` | `ChainDynParam::JntToGravity` |
+| RNEA | `rnea` | `ChainIdSolver_RNE::CartToJnt` |
+| $C\dot q + g$ | `nonLinearEffects` | `ChainDynParam::JntToCoriolis` + `JntToGravity` |
+| $M(q)$ | `crba` (upper triangle, mirrored) | `ChainDynParam::JntToMass` |
+| Tip Jacobian | `computeFrameJacobian`, `LOCAL_WORLD_ALIGNED` | `ChainJntToJacSolver`, rotated from base_link to the root |
+| Tip pose | `framesForwardKinematics` | `ChainFkSolverPos_recursive`, composed with root → base_link |
+| Payload | added to the wrist_3 joint body through the tip frame's placement | added to the last segment's inertia (tip frame), solvers rebuilt |
+| Limits | from the URDF via Pinocchio | from the URDF via `urdf::Model` (kdl_parser does not carry them) |
+
+Conventions that had to line up, and are checked rather than assumed: KDL computes in the chain
+root (`base_link`), so the wrapper rotates gravity into it and the Jacobian and tip pose out of
+it, composing the fixed joints from the URDF root (`world`); `KDL::RigidBodyInertia(m, c, I_c)`
+takes the rotational inertia about the centre of mass, and a segment's inertia is expressed in
+its tip frame; KDL solvers hold a reference to their chain, so a copy of the model has to
+rebuild them.
+
+**Gravity.** One read-only parameter, `gravity_z` (default −9.81 m/s²), feeds both backends.
+It must equal the simulator's gravity: SDF's default is −9.8, and in v0.1 that 0.01 m/s²
+difference made a correctly modelled arm drift in hand guiding (4 mm/s, 0.3 mm/s after the fix)
+until the worlds set `<gravity>0 0 -9.81</gravity>` explicitly. `test_gravity_consistency.py` keeps the worlds, the
+controllers' YAML and the parameter default in step.
+
+**Equivalence.** `test/test_dynamics_equivalence.cpp` evaluates both backends on 200 random
+states (q inside the URDF position limits, q̇ inside the velocity limits, |q̈| ≤ 10 rad/s²) at
+0 kg and 1 kg payload, plus a 1 kg off-axis payload on the rotated `ft_frame` and gravity −9.8.
+Gravity, RNEA and $C\dot q + g$ must agree within 1e-6 N·m per joint, $M$ within 1e-6, the
+Jacobian within 1e-9 and the tip pose within 1e-9; the worst deviations it prints are at the
+rounding level (1e-14 N·m), which is what two exact recursions on the same inertias should give.
+The mock-hardware test runs both controllers on the KDL backend and compares their torques with
+Pinocchio's, and `scripts/ci_smoke.sh` (in CI with `SMOKE_BACKEND=kdl` too) runs both in
+Gazebo.
+
+**Cost.** `bench_dynamics_timing` (table in [results.md](results.md#dynamics-timing--details))
+times single calls: Pinocchio is faster on both $g(q)$ and RNEA, and on this 6-DoF arm neither
+uses more than a fraction of a percent of the 2 ms cycle.
+
+## Pinocchio identities
+
+The Pinocchio backend (Pinocchio 4.1) is also tested against identities that must hold for any
+rigid-body model (`test/test_pinocchio_model.cpp`), so the equivalence test compares KDL with a
+reference that is itself checked: $g = \mathrm{RNEA}(q,0,0)$,
 $\mathrm{RNEA}(q,0,a) - g = M a$, $M = M^T \succ 0$, the Jacobian equals the finite difference
 of the tip position, and adding a payload $m$ at the tip adds $J^T [0,0,mg]^T$ to $g(q)$.
