@@ -7,8 +7,9 @@
 #   SMOKE_TARGET=stock scripts/ci_smoke.sh    # stock ur_simulation_gz bringup, for comparison
 #
 # For this repo's bringup it then switches to mode track and has the effort tracking controller
-# follow a trajectory, switches to mode handguide and checks that the arm floats still, and checks
-# that both effort controllers were configured with the requested dynamics backend.
+# follow a trajectory with each control law (pid_ff, computed_torque), switches to mode handguide
+# and checks that the arm floats still, and checks that both effort controllers were configured
+# with the requested dynamics backend.
 # The stock bringup is known to be unreliable on Lyrical: its `ros_gz_sim create` can spawn the
 # robot twice when Gazebo is slow to start (see sim.launch.py docstring and NOTES.md).
 #
@@ -174,6 +175,20 @@ if [ "${TARGET}" = "teaching" ]; then
         err=$(max_diff "$(read_ordered)" "${TRACK_GOAL[*]}")
         echo "[smoke] effort tracking: max |q - goal| = ${err} rad (tolerance ${TRACK_TOL_RAD})"
         python3 -c "import sys; sys.exit(0 if ${err} <= ${TRACK_TOL_RAD} else 1)" || exit 5
+        # Same controller, computed-torque law, back to the first goal.
+        timeout "$(remaining)" ros2 param set /pid_ff_trajectory_controller control_law \
+          computed_torque >"${LOG_DIR}/param_ct.txt" 2>&1 || { cat "${LOG_DIR}/param_ct.txt"; exit 5; }
+        echo "[smoke] computed torque: trajectory to ${goal_list} in 3 s"
+        timeout "$(remaining)" ros2 topic pub --once -w 1 \
+          /pid_ff_trajectory_controller/joint_trajectory trajectory_msgs/msg/JointTrajectory \
+          "{joint_names: [${joint_list}], points: [{positions: [${goal_list}], time_from_start: {sec: 3}}]}" \
+          >"${LOG_DIR}/track_ct_pub.txt" 2>&1
+        sleep 5
+        err=$(max_diff "$(read_ordered)" "${GOAL[*]}")
+        echo "[smoke] computed torque: max |q - goal| = ${err} rad (tolerance ${TRACK_TOL_RAD})"
+        python3 -c "import sys; sys.exit(0 if ${err} <= ${TRACK_TOL_RAD} else 1)" || exit 5
+        timeout "$(remaining)" ros2 param set /pid_ff_trajectory_controller control_law pid_ff \
+          >>"${LOG_DIR}/param_ct.txt" 2>&1
         ;;
       handguide)
         sleep 0.5
