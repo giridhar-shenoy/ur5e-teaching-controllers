@@ -121,6 +121,7 @@ def main(argv=None) -> int:
     expected_z = (args.actual_payload - args.model_payload) * G
 
     tracker = "pid_ff_trajectory_controller"
+    node.switcher.ensure_configured(tracker)
     node.set_params(tracker, {"payload_mass": args.model_payload})
     for rep in range(args.reps):
         offset = rng.uniform(-0.05, 0.05, size=6)
