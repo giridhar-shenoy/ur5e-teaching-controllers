@@ -518,3 +518,82 @@ af0002b feat(dynamics): add an orocos KDL backend behind a common dynamics inter
 ### Does Sunday 1 Nov hold?
 
 Yes. The MUST list is done except CI confirming the new commits; the SHOULD is next tonight.
+
+## v0.2 CHECKPOINT 3 — timing CSV exists; computed torque tracks a trajectory in the sim (2026-10-29 03:36 IST)
+
+Wall-clock spent: 1 h 18 min (session start 02:18 IST).
+
+### git status (before this checkpoint's commit)
+
+```text
+$ git status --short
+ M NOTES.md
+ M docs/controllers.md
+$ git log --oneline 8949478..HEAD
+f91e559 test(smoke): drive the tracking controller with computed torque as well
+781e63f feat(bench): run the tracking benchmark as pid / pid_ff / computed_torque
+6c17e77 feat(controllers): add a computed-torque law to the tracking controller
+```
+
+CI for checkpoint 2 (`8949478`):
+[40773777144](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/actions/runs/40773777144)
+— success, including the new step "Smoke test, KDL dynamics backend".
+
+### Checklist
+
+- [x] **Timing CSV exists**
+
+  ```text
+  $ head -3 results/dynamics_timing.csv | cut -c1-140
+  bench,git_commit,build_type,cpu,seed,calls,backend,function,median_us,p95_us,mean_us,max_us,median_cycle_fraction,p95_cycle_fraction
+  dynamics_timing,96365efa478c,RelWithDebInfo,"11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",1,100000,none,clock,0.0160,0.0170,...
+  ```
+
+  Pinocchio g / RNEA 0.538 / 0.887 µs median, KDL 1.678 / 1.702 µs; worst p95 0.1077 % of 2 ms.
+
+- [x] **Computed torque runs on both backends (unit level)**
+
+  ```text
+  $ ./build/ur5e_teaching_controllers/test_computed_torque
+  [computed_torque] pinocchio: worst deviation from the continuous-time response 0.0147057 x |e0|
+  [computed_torque] kdl: worst deviation from the continuous-time response 0.0147057 x |e0|
+  [computed_torque] pinocchio: max |e| on the sinusoid 9.49433e-05 rad
+  [computed_torque] kdl: max |e| on the sinusoid 9.49433e-05 rad
+  [  PASSED  ] 9 tests.
+  $ colcon test --packages-select ur5e_teaching_controllers && colcon test-result
+  Summary: 72 tests, 0 errors, 0 failures, 0 skipped
+  ```
+
+- [x] **Computed torque tracks a trajectory in the sim** (short Gazebo checks under the gazebo
+  lock; not published)
+
+  ```text
+  $ REPS=1 OUT=/tmp/r1_ct_check.csv scripts/bench_tracking.sh --speeds 1.0 --variants pid_ff computed_torque
+  [bench_tracking]: rep 0 speed 1.0 pid_ff: max RMSE 1.75e-04 rad, max |e| 2.88e-03 rad
+  [bench_tracking]: rep 0 speed 1.0 computed_torque: max RMSE 3.86e-04 rad, max |e| 5.46e-03 rad
+  [bench_tracking] done in 52 s wall -> /tmp/r1_ct_check.csv
+  $ SMOKE_BACKEND=pinocchio scripts/ci_smoke.sh   (and SMOKE_BACKEND=kdl)
+  [smoke] computed torque: max |q - goal| = 0.00e+00 rad (tolerance 0.01)     (both backends)
+  [smoke] PASS in 66 s / PASS in 45 s
+  $ pgrep -af '[b]in/gz sim' | grep r1 || echo "no r1 gz left"
+  no r1 gz left
+  ```
+
+  Finding: on the benchmark path computed torque is ~2.2× worse than PID + feedforward on every
+  joint at the same nominal bandwidth, with exact models. The integral term is not the reason
+  (PID + FF with ki = 0: 0.132 / 0.95 mrad). An offline exact-plant replica shows both laws
+  ~10× better than Gazebo and CT more delay-sensitive. The remaining cause is not identified;
+  NOTES.md "Computed torque" has the runs. Not tuned away: the published comparison uses the
+  shipped gains.
+
+### What is left
+
+- The 3 × 3 × 3 tracking rerun (approved, ~7–15 min): queued behind R4's training run, which
+  holds the heavy/build/gazebo locks (started 03:31).
+- README / results.md three-column tables (generated after the rerun), CHECKPOINT 4.
+- TcpJogController (allowed: computed torque is done before Friday evening). Running bench_jog
+  for published numbers is not on tonight's approved list; it will go to WAITING FOR GIRI.
+
+### Does Sunday 1 Nov hold?
+
+Yes.
