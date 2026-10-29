@@ -659,7 +659,7 @@ c66be22 feat(controllers): add TcpJogController (mode jog), DLS with scheduled d
   load and the A/B), "What I'd do next".
 
 - [x] **docs/what_broke.md** — DRAFT, first person, 688 words in the body, from NOTES.md and
-  CHECKPOINTS.md; no employer content, no auto-tuner.
+  CHECKPOINTS.md; no employer content.
 
 - [x] **CHANGELOG** — v0.2 Added / Changed / Fixed entries.
 
