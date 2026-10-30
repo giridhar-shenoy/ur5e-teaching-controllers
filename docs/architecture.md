@@ -86,7 +86,7 @@ without blocking, and never frees what it replaces.
 On Lyrical the stock launch (ur_simulation_gz 2.5.0) passes no parameter file to its spawners
 (ros2_control 6.10.1 then initialises the trajectory controller with no joints) and can spawn the
 robot twice when Gazebo boots slowly. `sim.launch.py` keeps the same building blocks and fixes
-both; details in its docstring and in `NOTES.md`.
+both; details in its docstring and in [what_broke.md](what_broke.md).
 
 ## Language split
 
