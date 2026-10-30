@@ -4,14 +4,12 @@
 
 ![UR5e switching between trajectory tracking and gravity-compensated hand guiding in Gazebo](docs/assets/hero.gif)
 
-This is a set of ros2_control effort controllers for a simulated UR5e (ROS 2 Lyrical, Gazebo Jetty): joint-space tracking with PID, PID + RNEA feedforward or computed torque on Pinocchio or KDL dynamics, gravity-compensated hand guiding with a runtime payload model, and damped-least-squares TCP jogging. These are controllers I shipped on production 6-axis arms, rebuilt in public on a UR5e, with every dynamics term computed from the URDF instead of hand-tuned. <!-- headline:begin -->
+This is a set of ros2_control effort controllers for a simulated UR5e (ROS 2 Lyrical, Gazebo Jetty): joint-space tracking with PID, PID + RNEA feedforward or computed torque on Pinocchio or KDL dynamics, gravity-compensated hand guiding with a runtime payload model, and damped-least-squares TCP jogging. Hand guiding and TCP jogging are the two controllers a teach-by-demonstration workflow on an industrial arm needs, and the tracking loop is what runs underneath them; this is a from-scratch build of all three on a UR5e, with every dynamics term computed from the URDF rather than hand-tuned. <!-- headline:begin -->
 At 1× nominal speed the RNEA feedforward brings the worst-joint tracking RMSE to 0.21 ± 0.03 mrad (PID alone: 8.81 ± 0.01 mrad, computed torque 0.21 ± 0.04 mrad), and in hand guiding a 1 kg payload-model error costs the operator 9.81 ± 0.00 N of vertical force to hold the arm still (Δm·g = 9.81 N) and, let go, carries the TCP 201 ± 4 mm in one second.
 <!-- headline:end -->
 
-**Language split:** C++17 for everything in the 500 Hz control loop (controllers, the Pinocchio
-and KDL dynamics backends, trajectory profiles) and for the timing benchmark that measures it;
-Python only for orchestration, recording and plots — the loop must not depend on a garbage
-collector, and nothing outside it needs C++.
+**Language split:** C++17 for everything in the 500 Hz loop (controllers, both dynamics backends,
+trajectory profiles, the timing benchmark); Python for orchestration, recording and plots.
 
 ## Run it
 
@@ -94,19 +92,19 @@ and hand-guiding numbers were produced with the Pinocchio backend (the default).
 ## Two dynamics backends
 
 Both controllers get their dynamics through one interface with two implementations, chosen per
-controller by the `dynamics_backend` parameter: `pinocchio` (the default) or `kdl`. On the
-production 6-axis arms I used KDL's recursive Newton–Euler solver (`ChainIdSolver_RNE`), with
-`ChainDynParam` for gravity, mass matrix and Coriolis terms; here Pinocchio is the default,
-because the same model also gives frame Jacobians, placements and analytical derivatives, and it
-is the faster of the two. Both are built from the same URDF, and gravity comes from one
-`gravity_z` parameter shared by both, which has to match the world (SDF's default is 9.8, not
-9.81). `test_dynamics_equivalence` runs both on 200 random states inside the joint limits, with
-and without a 1 kg payload, and requires gravity and RNEA torques to agree within 1e-6 N·m per
-joint, mass matrices within 1e-6 and Jacobians within 1e-9; they agree to rounding error (the
-test prints its worst deviations). The timing row above shows what the choice costs:
-Pinocchio is faster on both calls, and neither uses more than a fraction of a percent of the
-2 ms cycle. A runtime payload change rebuilds the model outside the realtime loop (for KDL
-that means new solvers) and `update()` only swaps a pointer.
+controller by the `dynamics_backend` parameter: `pinocchio` (the default) or `kdl`. KDL
+(`ChainIdSolver_RNE` for RNEA, `ChainDynParam` for gravity, mass matrix and Coriolis terms) is
+what most ros_control-era arm stacks used; Pinocchio is the default here because the same model
+also gives frame Jacobians, placements and analytical derivatives, and it is the faster of the
+two. Both are built from the same URDF, and gravity comes from one `gravity_z` parameter shared by
+both, which has to match the world (SDF's default is 9.8, not 9.81). `test_dynamics_equivalence`
+runs both on 200 random states inside the joint limits, with and without a 1 kg payload, and
+requires gravity and RNEA torques to agree within 1e-6 N·m per joint, mass matrices within 1e-6
+and Jacobians within 1e-9; they agree to rounding error (the test prints its worst deviations).
+The timing row above shows what the choice costs: Pinocchio is faster on both calls, and neither
+uses more than a fraction of a percent of the 2 ms cycle. A runtime payload change rebuilds the
+model outside the realtime loop (for KDL that means new solvers) and `update()` only swaps a
+pointer.
 
 ## Where it fails
 
@@ -133,8 +131,8 @@ that means new solvers) and `update()` only swaps a pointer.
    show up as tracking error; compare the PID-only and PID + RNEA columns above.
 6. **Computed torque buys nothing over PID + feedforward here, and is more fragile.** With exact
    models and the same nominal bandwidth the two track about equally well on a quiet machine
-   (table above). Under CPU contention computed torque fell further behind (a check made while
-   other sessions compiled, NOTES.md). It feeds the measured state back through the whole
+   (table above). Under CPU contention computed torque fell further behind (a check made while a
+   build was running; docs/what_broke.md). It feeds the measured state back through the whole
    inverse dynamics, so lag in that state reaches the torque directly. On a real arm, where the
    model is wrong, that trade would need measuring again.
 7. **The wrist_3 loop is at the edge of what a 2 ms explicit loop allows.** Its joint-space
@@ -145,16 +143,16 @@ that means new solvers) and `update()` only swaps a pointer.
    compliance, no motor current limits or torque ripple, perfect torque tracking, and an exactly
    known model: the feedforward numbers here are an upper bound on what a real UR5e would give.
 9. **The feedforward tracking numbers depend on what else the machine is doing.** Run next to
-   another session's benchmark on the same laptop, the RNEA-feedforward rows came out clearly
-   worse than when run alone, while the PID-only and hand-guiding rows did not move (the run
-   log, with the numbers, is in NOTES.md). It is not only other benchmarks: the v0.1 table
-   showed PID + feedforward several times lower than the one above, and re-running the v0.1
-   code itself on 29 Oct reproduced the new level, not its own, with no package changed in
-   between. I have not pinned down the cause; gz_ros2_control runs the controller manager
-   inside the physics step, so the suspect is the ROS side (when commands are adopted, what is
-   recorded) rather than the control law. `scripts/regenerate_all.sh` refuses to start while a
-   simulator, build, pip install or training run is active, and the published rows were made
-   alone; treat the feedforward rows as a level, not a precise number.
+   another benchmark on the same laptop, the RNEA-feedforward rows came out clearly worse than
+   when run alone, while the PID-only and hand-guiding rows did not move (the run log is in
+   docs/what_broke.md). It is not only other benchmarks: the v0.1 table showed PID + feedforward
+   several times lower than the one above, and re-running the v0.1 code itself on 29 Oct
+   reproduced the new level, not its own, with no package changed in between. I have not pinned
+   down the cause; gz_ros2_control runs the controller manager inside the physics step, so the
+   suspect is the ROS side (when commands are adopted, what is recorded) rather than the control
+   law. `scripts/regenerate_all.sh` refuses to start while a simulator, build, pip install or
+   training run is active, and the published rows were made alone; treat the feedforward rows as a
+   level, not a precise number.
 10. **Trajectories stop at every waypoint, and pre-emption is abrupt.** The trapezoidal
    re-profiling is rest-to-rest per segment (no blending), which is simple and exactly testable
    but slower than necessary. A new trajectory pre-empts the running one from the current
@@ -199,3 +197,6 @@ the full 5-speed × 4-variant × 5-repetition tracking grid, and a `ur5e_teachin
 - [docs/results.md](docs/results.md) — every number, with the command that produces it
 
 MIT licensed. Third-party material is listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Written with an AI coding agent working in my terminal; I set the scope, the constraints and the
+acceptance criteria, reviewed the changes, and ran every benchmark.

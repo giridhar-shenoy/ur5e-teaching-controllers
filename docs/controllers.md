@@ -99,16 +99,16 @@ acceleration units only cancels it at rest, and the PID law's integrator already
 job. Keeping the outer loop a pure PD also keeps the benchmark honest: the computed-torque
 column shows what the model buys on its own, with nothing integrating the model's mistakes away.
 
-**What the benchmark shows** (table in [results.md](results.md)): both model-based laws beat
-PID by more than an order of magnitude, and with exact models and the same nominal bandwidth
-they track the path about equally well when the machine is quiet. Under CPU contention they do
-not degrade equally. A check run while other sessions were compiling had computed torque about
-2× behind PID + feedforward on every joint (NOTES.md). An offline replica on an exact
+**What the benchmark shows** (table in [results.md](results.md)): both model-based laws beat PID
+by more than an order of magnitude, and with exact models and the same nominal bandwidth they
+track the path about equally well when the machine is quiet. Under CPU contention they do not
+degrade equally. A check run while a build was running had computed torque about 2× behind PID +
+feedforward on every joint ([what_broke.md](what_broke.md)). An offline replica on an exact
 rigid-body plant with a 2 ms hold shows the same direction when an actuation delay is added:
-computed torque feeds the measured state back through the whole inverse dynamics, so any lag
-in that state reaches the torque directly, while PID + feedforward evaluates its model on the
-reference. The replica's errors are an order of magnitude below Gazebo's for both laws, so
-what Gazebo adds on top is not identified.
+computed torque feeds the measured state back through the whole inverse dynamics, so any lag in
+that state reaches the torque directly, while PID + feedforward evaluates its model on the
+reference. The replica's errors are an order of magnitude below Gazebo's for both laws, so what
+Gazebo adds on top is not identified.
 
 **Saturation and anti-windup.** $\tau$ is clamped to the URDF effort limit times
 `effort_limit_scale`. The integral uses conditional integration: it is frozen whenever the

@@ -14,3 +14,8 @@ datasets/
 results/raw/
 *.bag
 *.mcap
+
+# Working session logs (kept on disk for the build sessions, not tracked)
+CHECKPOINTS.md
+MORNING.md
+NOTES.md
