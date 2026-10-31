@@ -212,10 +212,11 @@ RNEA (the recursive Newton–Euler algorithm, the standard link-by-link calculat
 motion needs). Feedforward predicts the torque for where the arm should be and adds the PID
 correction on top; computed torque computes it for where the arm is and also scales the correction
 by the arm's inertia, so a gain gives the same response in every pose (with plain PID, the same gain
-moves a light joint or pose faster than a heavy one). Torque is capped at each joint's limit, and a
-new path replaces the running one at once, starting from the current reference at zero speed. The
-benchmark runs one fixed path at its nominal speed (the timing it was planned with) and at half and
-double that. Equations and gains: [docs/controllers.md](docs/controllers.md#tracking-controller).
+moves a joint faster when little inertia hangs on it, as at the wrist or with the arm folded in,
+than when a lot does). Torque is capped at each joint's limit, and a new path replaces the running
+one at once, starting from the current reference at zero speed. The benchmark runs one fixed path at
+its nominal speed (the timing it was planned with) and at half and double that. Equations and gains:
+[docs/controllers.md](docs/controllers.md#tracking-controller).
 
 ### Hand guiding: `GravityCompHandGuidingController`, mode `handguide`
 
@@ -310,8 +311,9 @@ Thirteen known failures in four groups. Each has a long form in
 
 ### Model errors show up as drift
 
-When the model is wrong the arm does not oscillate or run away; it moves where the error pushes it,
-and someone has to push back.
+What the model does and does not buy. When the payload model is wrong the arm does not oscillate or
+run away; it moves where the error pushes it, and someone has to push back (F1). Without the model,
+PID lags (F2); with it, computed torque adds nothing over feedforward here (F3).
 
 - **F1. A wrong payload model makes the arm drift, and the operator pays for it.** If the payload
   model is lighter or heavier than the real load, the floating arm sinks or rises, and holding it
@@ -365,7 +367,7 @@ and nothing here yet copes with bad sensor data.
 ### The benchmark has a floor I have not removed
 
 Below a certain error, the floor, the tracking results measure the test setup rather than the
-controllers.
+controllers. F9 is a correction of my own earlier explanation, not a fault in the loop.
 
 - **F8. The feedforward error is set by a timing offset between reference and measured state, not by
   the control law (and not by CPU load).** If each measurement is compared with the reference from a
@@ -457,7 +459,8 @@ the simulated sensor exists here as `tcp_fts_sensor`, but no controller reads it
 
 1. Find the timing offset: record the reference and measured joint angles together with the
    simulator step each belongs to, find the time shift that best lines them up, fix how the two are
-   paired, and then report feedforward and computed torque as a spread over at least five runs.
+   paired, and then measure feedforward and computed torque again, with the offset removed, as a spread
+   over at least five runs.
 2. Make all three controllers notice joint readings that stop updating or contain invalid numbers,
    bring the arm to a controlled stop when they do, and limit how far the jog reference may run
    ahead of the arm.
