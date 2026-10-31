@@ -163,7 +163,7 @@ class BenchNode(Node):
         """Move to `pose` with the effort tracking controller, PID + feedforward.
 
         Not with the stock position JTC: switching a joint from effort back to position in
-        gz_ros2_control 3.0.9 leaves it uncommanded and the arm falls (see NOTES.md).
+        gz_ros2_control 3.0.9 leaves it uncommanded and the arm falls (docs/what_broke.md, F6).
         """
         controller = "pid_ff_trajectory_controller"
         self.switcher.ensure_configured(controller)

@@ -1,6 +1,7 @@
 # ros2_control configuration for the UR5e teaching sim.
 # sim.launch.py adds `params_file: <this file>` to every controller entry at launch time, because
-# ros2_control 6.10.1 only passes parameters to a controller node through that key (see NOTES.md).
+# ros2_control 6.10.1 only passes parameters to a controller node through that key (see the
+# sim.launch.py docstring and docs/what_broke.md, F7).
 #
 # Interface ownership (only one active controller may claim a command interface):
 #   joint_trajectory_controller         -> <joint>/position   (stock, used for bringup and homing)
@@ -26,8 +27,10 @@ controller_manager:
     gravity_comp_handguide_controller:
       type: ur5e_teaching_controllers/GravityCompHandGuidingController
       # If hand guiding trips its speed cap (update() returns ERROR), the controller_manager
-      # activates the tracking controller, which holds the joints where they are instead of
-      # leaving them limp. The fallback must be loaded and configured (mode_manager does that).
+      # activates the tracking controller, which stops the joints where they are instead of
+      # leaving them limp. It stops them by braking hard: at the trip speed its kd term alone
+      # reaches the effort limit on shoulder_lift (docs/what_broke.md, F11 and F12). The fallback
+      # must be loaded and configured (mode_manager does that).
       fallback_controllers: [pid_ff_trajectory_controller]
 
     tcp_jog_controller:
@@ -65,10 +68,13 @@ joint_trajectory_controller:
       wrist_2_joint: {trajectory: 0.2, goal: 0.1}
       wrist_3_joint: {trajectory: 0.2, goal: 0.1}
 
-# Gains: critically damped PD at ~20 rad/s (base) / ~30 rad/s (wrist) for the joint-space inertia
-# at the home pose, M_jj from Pinocchio = [1.06, 2.59, 0.88, 0.023, 0.0054, 0.0003] kg m^2;
-# integral time 0.5 s. The wrist_3 gains are tiny because its inertia is: with kd * dt / I > 1 the
-# explicit 2 ms loop would go unstable. See docs/controllers.md.
+# Gains: PD per joint, chosen on the joint-space inertia at the home pose, M_jj from Pinocchio =
+# [1.06, 2.59, 0.88, 0.023, 0.0054, 0.00026] kg m^2; integral time kp / ki = 0.5 s. Read back as
+# w = sqrt(kp / M_jj), zeta = kd / (2 sqrt(kp M_jj)) they give 21-24 rad/s and zeta 0.90-0.99 on
+# the base joints, but 36-44 rad/s on the wrists with zeta 0.90 / 0.72 / 0.88: not critically
+# damped at 30 rad/s as first intended. The wrist_3 gains are tiny because its inertia is;
+# kd * dt / M_jj is at most 0.16 (wrist_3), well inside the explicit 2 ms loop's bound of 1.
+# See docs/controllers.md, "Gains and bandwidths".
 pid_ff_trajectory_controller:
   ros__parameters:
     joints:
@@ -89,8 +95,9 @@ pid_ff_trajectory_controller:
     max_acceleration: [4.0, 4.0, 4.0, 6.0, 6.0, 6.0]
     feedforward: true
     # Computed torque (control_law: computed_torque) places each joint's error poles at w with
-    # damping ratio zeta; w matches the PID design bandwidth above (20 / 30 rad/s) so the two laws
-    # are compared at the same nominal stiffness. Kd' dt = 2 zeta w dt <= 0.12 at 2 ms.
+    # damping ratio zeta. w = 20 rad/s is close to the base joints' PD bandwidth above, so there
+    # the two laws are compared at roughly the same stiffness; the wrist PD loops (36-44 rad/s)
+    # are stiffer than w = 30, so on the wrists they are not. Kd' dt = 2 zeta w dt <= 0.12 at 2 ms.
     control_law: pid_ff
     ct_omega: [20.0, 20.0, 20.0, 30.0, 30.0, 30.0]
     ct_zeta: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
@@ -114,8 +121,8 @@ gravity_comp_handguide_controller:
     payload_com: [0.0, 0.0, 0.03]
     coriolis_compensation: true
     # Joint damping trades push effort for drift. With [8, 8, 5, 2, 1, 0.05] a 1 kg payload-model
-    # error moved the TCP 0.5-1.0 m in 2 s (the arm reached the floor); see NOTES.md. Explicit
-    # 2 ms loop: keep D * dt / M_jj < 1 (wrist_2 ~0.56, wrist_3 ~0.33 at 0 kg payload).
+    # error carried the arm to the floor within 2 s (docs/what_broke.md, appendix A12). Explicit
+    # 2 ms loop: keep D * dt / M_jj < 1 (wrist_2 ~0.56, wrist_3 ~0.39 at 0 kg payload).
     damping: [25.0, 25.0, 15.0, 3.0, 1.5, 0.05]
     limit_margin: 0.2
     limit_stiffness: 50.0
@@ -123,8 +130,9 @@ gravity_comp_handguide_controller:
     state_publish_decimation: 1
 
 # TCP jogging: damped least squares on J(q_des), damping scheduled on the manipulability
-# w = |det J| (UR5e home ~0.08; ~0.004 at wrist_2 = 0.05 rad). The joint-space loop around the
-# integrated reference uses the tracking controller's PD gains with a little integral.
+# w = |det J| (UR5e home ~0.08; ~0.004 at wrist_2 = 0.05 rad). w is in m^3 (three linear rows),
+# so manipulability_threshold is tied to metres. The joint-space loop around the integrated
+# reference uses the tracking controller's gains (same kp, kd, ki).
 tcp_jog_controller:
   ros__parameters:
     joints:
