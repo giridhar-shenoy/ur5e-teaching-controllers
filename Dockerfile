@@ -1,5 +1,5 @@
 # ur5e-teaching-controllers — reproducible ROS 2 Lyrical environment.
-# Base tag verified through the Docker Hub registry API on 2026-10-28 (see NOTES.md).
+# Base tag verified through the Docker Hub registry API on 2026-10-28.
 FROM ros:lyrical-ros-base
 
 ARG DEBIAN_FRONTEND=noninteractive

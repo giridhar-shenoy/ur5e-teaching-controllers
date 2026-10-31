@@ -16,7 +16,7 @@ flowchart LR
       CM["controller_manager<br/>update_rate 500 Hz"]
       JSB["joint_state_broadcaster"]
       FTB["force_torque_sensor_broadcaster"]
-      JTC["joint_trajectory_controller<br/>claims */position (homing)"]
+      JTC["joint_trajectory_controller<br/>claims */position (bringup only)"]
       PID["PidFfTrajectoryController<br/>claims */effort (mode: track)"]
       HG["GravityCompHandGuidingController<br/>claims */effort (mode: handguide)"]
       JOG["TcpJogController<br/>claims */effort (mode: jog)"]
@@ -31,6 +31,7 @@ flowchart LR
   BR["ros_gz_bridge<br/>/clock, /world/bench/wrench[/persistent|/clear]"]
   MM["mode_manager (Python)<br/>strict switch_controller"]
   BENCH["bench_tracking / bench_handguide / bench_jog (Python)<br/>record, analyse, CSV"]
+  SMOKE["ci_smoke.sh<br/>first move after bringup"]
   TIMING["bench_dynamics_timing (C++, standalone)<br/>no ROS graph, no Gazebo"]
   TIMING -.->|same DynamicsModel library| PIN
 
@@ -42,7 +43,7 @@ flowchart LR
   FTB -->|/force_torque_sensor_broadcaster/wrench| BENCH
   MM -->|/controller_manager/switch_controller| CM
   BENCH -->|~/joint_trajectory| PID
-  BENCH -->|~/joint_trajectory| JTC
+  SMOKE -->|follow_joint_trajectory| JTC
   PID -->|~/controller_state 500 Hz| BENCH
   HG -->|~/controller_state 500 Hz| BENCH
   BENCH -->|~/twist TwistStamped| JOG
@@ -60,6 +61,11 @@ flowchart LR
 | `gravity_comp_handguide_controller` | `<joint>/effort` | position, velocity | parameters `payload_mass`, `payload_com` (runtime) | `~/controller_state` |
 | `tcp_jog_controller` | `<joint>/effort` | position, velocity | `~/twist` (`geometry_msgs/TwistStamped`, root frame, 0.1 s deadman) | `~/controller_state`, `~/jog_state` |
 | `force_torque_sensor_broadcaster` (stock) | — | `tcp_fts_sensor/{force,torque}.{x,y,z}` | — | `~/wrench` |
+
+The stock position controller is only used at bringup: once an effort controller has run,
+switching a joint back to position drops the arm on gz_ros2_control 3.0.9
+([what_broke.md F6](what_broke.md#f6-switching-a-joint-from-effort-back-to-position-drops-the-arm-gz_ros2_control-309)),
+so homing uses the effort tracking controller and no mode switches back.
 
 Only one controller may command a joint at a time. `mode_manager` enforces this with a single
 STRICT `switch_controller` request that activates the target and deactivates every active
@@ -86,7 +92,8 @@ without blocking, and never frees what it replaces.
 On Lyrical the stock launch (ur_simulation_gz 2.5.0) passes no parameter file to its spawners
 (ros2_control 6.10.1 then initialises the trajectory controller with no joints) and can spawn the
 robot twice when Gazebo boots slowly. `sim.launch.py` keeps the same building blocks and fixes
-both; details in its docstring and in [what_broke.md](what_broke.md).
+both; details in its docstring and in
+[what_broke.md F7](what_broke.md#f7-the-stock-ur_sim_controllaunchpy-does-not-work-on-lyrical-as-shipped).
 
 ## Language split
 

@@ -7,7 +7,7 @@
 
 Why this is not a thin wrapper around ur_simulation_gz/ur_sim_control.launch.py (as first
 planned): on Lyrical that launch (2.5.0) fails in two ways that cannot be fixed through its
-arguments (details in NOTES.md):
+arguments (details in docs/what_broke.md, F7):
   1. Its spawners pass no parameter file, and ros2_control 6.10.1 no longer hands the
      controller_manager's --params-file to controller nodes, so joint_trajectory_controller
      dies with "Length of parameter 'joints' is '0'".

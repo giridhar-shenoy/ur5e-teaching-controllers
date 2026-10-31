@@ -15,7 +15,8 @@ from rclpy.node import Node
 # Modes exposed by mode.launch.py / mode_manager, and the controller each one activates.
 # There is deliberately no way back to the position-interface JTC: with gz_ros2_control 3.0.9 a
 # joint switched from effort back to position is left without any command and the arm falls
-# (observed 2026-10-28, see NOTES.md). Homing therefore uses the effort tracking controller.
+# (observed 2026-10-28, docs/what_broke.md F6). Homing therefore uses the effort tracking
+# controller.
 MODES = {
     "track": "pid_ff_trajectory_controller",
     "handguide": "gravity_comp_handguide_controller",
