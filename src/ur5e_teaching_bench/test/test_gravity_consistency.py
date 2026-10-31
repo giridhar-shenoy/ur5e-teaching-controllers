@@ -1,8 +1,12 @@
 """The controllers' model gravity must be the simulator's gravity.
 
-SDF's default gravity is -9.8 m/s^2 and both dynamics backends default to -9.81; in v0.1 the
-mismatch showed up as a constant ~0.1 N error in the hand-guiding hold force until the worlds set
-<gravity> explicitly. This keeps the worlds and the controllers' gravity_z parameter in step.
+SDF's default gravity is -9.8 m/s^2 and both dynamics backends default to -9.81. In v0.1 the
+mismatch made the arm drift with a correct payload model and offset the hand-guiding hold force
+until the worlds set <gravity> explicitly (those values were recorded by hand; they are in the
+appendix of docs/what_broke.md). With the two in step, every row of results/handguide.csv gives
+a hold force equal to the payload error times g to the CSV's last printed digit; docs/results.md
+prints the residual, generated from the CSV by scripts/make_results.py. This test keeps the
+worlds and the controllers' gravity_z parameter in step.
 """
 
 import xml.etree.ElementTree as ET
