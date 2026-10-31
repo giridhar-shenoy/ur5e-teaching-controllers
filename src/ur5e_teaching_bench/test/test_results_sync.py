@@ -1,4 +1,8 @@
-"""The README results block and docs/results.md must be exactly what the CSVs produce."""
+"""The README's generated blocks and docs/results.md must be exactly what the CSVs produce.
+
+make_results.py --check fails if a block is stale, if the README lacks one of the marker pairs
+(headline, breath, results, in that order) or if results/runs_2026-10-31/ holds no run CSV.
+"""
 
 import subprocess
 import sys
