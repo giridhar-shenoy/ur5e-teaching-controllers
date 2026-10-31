@@ -644,7 +644,7 @@ def headline(d: Data) -> str:
         why = (
             " Most of the error that remains is a timing artefact: the simulation compares the "
             f"commanded angle (the reference) with the measured angle {offset_phrase(d)} apart"
-            + (", by an amount that changes from run to run," if varies else ",")
+            + (", by a time gap that changes from run to run," if varies else ",")
             + " so a moving joint shows an error proportional to its speed even when it is on the "
             "path."
             + (" That is why the factor is a range, and" if varies else "")

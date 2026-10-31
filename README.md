@@ -9,11 +9,12 @@ instead of only reacting to errors.
 
 ![Two side-by-side views of the simulated UR5e arm holding a 1 kg block, each pushed sideways at the wrist for 1.5 seconds (red arrow, 10 N), with a yellow trace of the tool's path. Left, the controller knows the load: the arm glides and then stays put. Right, the load is left out of the controller's estimate: the arm sinks throughout, during and after the push. A counter under each view shows how far the tool has moved up or down.](docs/assets/hero.gif)
 
-*Hand guiding in Gazebo, a robot physics simulator. Both arms carry the same 1 kg load and the same
-viscous damping (a torque opposing each joint's speed). The tracking controller (the path-following
-one, described below) holds both still, then hand guiding takes over and a scripted 10 N push at the
-wrist runs for 1.5 s. Left, correct payload model (the controller's estimate of the load): the arm
-glides, then stops. Right, load left out of the model: the arm sinks the whole time.*
+*Hand guiding in Gazebo, a robot physics simulator. Both arms carry the same 1 kg load, and in both
+the hand-guiding controller adds the same viscous damping (a torque opposing each joint's speed).
+The tracking controller (the path-following one, described below) holds both still, then hand
+guiding takes over and a scripted 10 N push at the wrist runs for 1.5 s. Left, correct payload model
+(the controller's estimate of the load): the arm glides, then stops. Right, load left out of the
+model: the arm sinks the whole time.*
 
 ## What this is
 
@@ -34,9 +35,9 @@ needs the changes under [What transfers](#what-transfers-to-a-real-ur-and-what-d
 - **Tracking** follows a trajectory (joint positions over time) with one of three control laws
   (rules that turn the error into torque): PID feedback (the position error, its integral and its
   rate of change, each scaled by a fixed gain); PID plus feedforward, which adds the torque the
-  arm's model predicts the planned motion needs; or computed torque, which runs the model at the
-  arm's actual joint angles and turns the PID correction into torque through the arm's own inertia
-  at that pose.
+  arm's model predicts the planned motion needs; or computed torque, which treats the PID output as
+  a desired acceleration and uses the model, at the arm's actual joint angles, to work out the
+  torque that produces it.
 - **Jogging** turns a tool velocity sent as a command (from the command line or a script) into joint
   speeds, so the tool follows a straight line; near a singularity (a pose, such as the arm fully
   stretched, where moving the tool in some direction would need infinitely fast joints) it gives up
@@ -44,12 +45,13 @@ needs the changes under [What transfers](#what-transfers-to-a-real-ur-and-what-d
 
 What it proves, in simulation: the controllers compute and apply the model's torques correctly. The
 controllers' model and the simulated arm are built from the same URDF (the robot's description file:
-links, masses, inertias), so a correct controller should remove nearly all of the tracking error and
-leave exactly the payload error for the operator to hold, and that is what the numbers show. It is a
-self-consistency check, not a test of a wrong or incomplete model; the simulator has no friction,
-and no motor limits or delays. Two independent libraries that compute torques from the arm's model,
-Pinocchio and KDL, agree to rounding error in an automated test. <!-- headline:begin -->
-With the shipped PID gains, PID plus feedforward made the worst joint's root-mean-square tracking error between about 60 and 110 times smaller than PID alone. Most of the error that remains is a timing artefact: the simulation compares the commanded angle (the reference) with the measured angle a fraction of a millisecond apart, by an amount that changes from run to run, so a moving joint shows an error proportional to its speed even when it is on the path. That is why the factor is a range, and the true improvement is probably larger. Computed torque did the same; the artefact hides any difference between the two. By construction (it follows from how the controller is built, not from a measurement), a payload model off by some mass leaves exactly that weight for the operator to hold.
+its links, or rigid segments, with their masses and inertias), so a correct controller should remove
+nearly all of the tracking error and leave exactly the payload error for the operator to hold, and
+that is what the numbers show. It is a self-consistency check, not a test of a wrong or incomplete
+model; the simulator has no friction, and no motor limits or delays. Two independent libraries that
+compute torques from the arm's model, Pinocchio and KDL, agree to rounding error in an automated
+test. <!-- headline:begin -->
+With the shipped PID gains, PID plus feedforward made the worst joint's root-mean-square tracking error between about 60 and 110 times smaller than PID alone. Most of the error that remains is a timing artefact: the simulation compares the commanded angle (the reference) with the measured angle a fraction of a millisecond apart, by a time gap that changes from run to run, so a moving joint shows an error proportional to its speed even when it is on the path. That is why the factor is a range, and the true improvement is probably larger. Computed torque did the same; the artefact hides any difference between the two. By construction (it follows from how the controller is built, not from a measurement), a payload model off by some mass leaves exactly that weight for the operator to hold.
 <!-- headline:end -->
 
 The gains are listed in [docs/controllers.md](docs/controllers.md#gains-and-bandwidths); the
@@ -77,9 +79,10 @@ feedforward. The large number on each panel is the worst joint's error at that i
 
 *Two parts. First, a jog straight up at 50 mm/s: the tool's trace follows the dashed commanded line.
 Then a jog sideways towards the wrist singularity, where two wrist axes line up: the controller
-raises its damping (a term in its tool-to-joint-speed calculation that accepts some error in the
-tool's path to keep the joints slow), so the tool slows down and drifts off the line. The strip
-below shows the tool speed, its distance from the line and the fastest joint speed.*
+raises its damping (a term in its tool-to-joint-speed calculation, unrelated to the viscous damping
+in hand guiding, that accepts some error in the tool's path to keep the joints slow), so the tool
+slows down and drifts off the line. The strip below shows the tool speed, its distance from the line
+and the fastest joint speed.*
 
 ## Run it
 
@@ -208,11 +211,11 @@ fast it moves) and turns the difference into torque. Both model-based laws get t
 RNEA (the recursive Newton–Euler algorithm, the standard link-by-link calculation of the torques a
 motion needs). Feedforward predicts the torque for where the arm should be and adds the PID
 correction on top; computed torque computes it for where the arm is and also scales the correction
-by the arm's inertia, so the gains mean the same thing in every pose. Torque is capped at each
-joint's limit, and a new path replaces the running one at once, starting from the current reference
-at zero speed. The benchmark runs one fixed path at its nominal speed (the timing it was planned
-with) and at half and double that. Equations and gains:
-[docs/controllers.md](docs/controllers.md#tracking-controller).
+by the arm's inertia, so a gain gives the same response in every pose (with plain PID, the same gain
+moves a light joint or pose faster than a heavy one). Torque is capped at each joint's limit, and a
+new path replaces the running one at once, starting from the current reference at zero speed. The
+benchmark runs one fixed path at its nominal speed (the timing it was planned with) and at half and
+double that. Equations and gains: [docs/controllers.md](docs/controllers.md#tracking-controller).
 
 ### Hand guiding: `GravityCompHandGuidingController`, mode `handguide`
 
