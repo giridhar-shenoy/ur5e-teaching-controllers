@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Regenerate every number and every GIF in the README from scratch:
 #   results/dynamics_timing.csv, results/tracking.csv, results/handguide.csv
-#     -> docs/results.md, README results block, plots
-#   docs/assets/mode_*.gif, docs/assets/hero.gif
+#     -> docs/results.md, README generated blocks, plots
+#   docs/assets/hero.gif, docs/assets/tracking.gif, docs/assets/jogging.gif (scripts/record_gifs.sh)
 # Run from a built workspace (scripts/build.sh). Prints the wall-clock time at the end.
+# Not included: bench_jog.sh (its numbers are not published yet) and the five-run spread in
+# results/runs_*/ (one bench_tracking.sh run per CSV, made separately).
 #
 # It refuses to start while another heavy process runs (scripts/lib/heavy_processes.sh): the
-# feedforward tracking RMSE tripled under CPU contention (NOTES.md), and the dynamics timing is a
-# wall-clock measurement. UR5E_ALLOW_BUSY=1 skips that check; numbers made that way should not be
-# published.
+# dynamics timing is a wall-clock measurement, and published numbers should not depend on
+# whatever else the machine is doing. UR5E_ALLOW_BUSY=1 skips that check; numbers made that way
+# should not be published.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # On the shared dev laptop, hold the machine-wide locks for the whole run, in the machine's order
-# (heavy, build, gazebo), so no other session builds or starts a simulator between our phases.
+# (heavy, build, gazebo), so no other job builds or starts a simulator between our phases.
 # The per-phase sim launches then use a private lock (a second flock on the same file from a
 # child would deadlock).
 if [ -z "${UR5E_REGEN_LOCKED:-}" ] && [ -d "$HOME/work/.locks" ]; then

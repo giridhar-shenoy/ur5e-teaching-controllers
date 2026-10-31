@@ -3,11 +3,13 @@
 #
 #   scripts/lib/heavy_processes.sh          # used by regenerate_all.sh and bench_dynamics_timing.sh
 #
-# Why: the published feedforward tracking RMSE tripled when another session's benchmark ran at the
-# same time (NOTES.md, 28 Oct), and the dynamics timing table is a wall-clock measurement. Both
-# scripts therefore refuse to start next to a simulator, a build, a pip install or a training/eval
-# run. The machine-wide locks (~/work/.locks) keep cooperating sessions out; this check catches
-# whatever does not take them. It does not look at load average: an editor or browser in the
+# Why: the dynamics timing table is a wall-clock measurement, and published numbers should not
+# depend on whatever else the machine is doing. (An earlier version of this comment blamed CPU
+# load for run-to-run changes in the feedforward tracking RMSE; the recorded runs do not support
+# that, see docs/what_broke.md, "Timing offset between reference and state".) Both scripts
+# therefore refuse to start next to a simulator, a build, a pip install or a training/eval run.
+# The machine-wide locks (~/work/.locks) keep cooperating jobs out; this check catches whatever
+# does not take them. It does not look at load average: an editor or browser in the
 # background is recorded by the benchmark, not refused.
 set -euo pipefail
 

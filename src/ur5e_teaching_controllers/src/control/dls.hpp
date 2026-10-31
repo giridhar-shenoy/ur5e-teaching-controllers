@@ -1,10 +1,18 @@
 // Copyright (c) 2026 Giridhar J Shenoy. MIT License.
 //
 // Damped least squares (DLS) inverse differential kinematics for a 6-DoF arm, with the damping
-// scheduled on the manipulability measure (Nakamura and Hanafusa 1986; Chiaverini 1997):
+// scheduled on Yoshikawa's manipulability measure w:
 //
 //   qd = J^T (J J^T + lambda^2 I)^-1 v,   lambda^2 = lambda_max^2 (1 - (w / w0)^2) if w < w0,
 //                                          lambda^2 = 0 otherwise,     w = sqrt(det(J J^T))
+//
+// The schedule has Chiaverini's form (1997), which he applies to the smallest singular value of
+// J; Nakamura and Hanafusa (1986) schedule lambda = lambda_0 (1 - w / w0)^2 on w. This variant,
+// Chiaverini's form on Yoshikawa's w, is neither paper. J has three linear rows (m) and three
+// angular rows (rad), so w mixes metres and radians and scales with the cube of the length unit:
+// w0 is a value in metres. For this square J, w does not change with the tool offset (moving the
+// reference point multiplies J by a block-triangular matrix of determinant 1), but how close to
+// singular a given w is (the smallest singular value) does.
 //
 // Far from singularities this is the exact inverse; close to one the damping trades tracking
 // accuracy for bounded joint speed (|qd| <= |v| / (2 lambda)). Fixed 6x6 sizes, so nothing here
