@@ -12,7 +12,8 @@
 # moves the arm and that it stops after the stream ends, and checks that the effort controllers
 # were configured with the requested dynamics backend.
 # The stock bringup is known to be unreliable on Lyrical: its `ros_gz_sim create` can spawn the
-# robot twice when Gazebo is slow to start (see sim.launch.py docstring and NOTES.md).
+# robot twice when Gazebo is slow to start (see the sim.launch.py docstring and
+# docs/what_broke.md, F7).
 #
 # Gazebo runs server-only (-s). Every process started here lives in one process group that is
 # killed on exit, so no gz sim is left behind.
