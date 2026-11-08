@@ -16,6 +16,8 @@ guiding takes over and a scripted 10 N push at the wrist runs for 1.5 s. Left, c
 (the controller's estimate of the load): the arm glides, then stops. Right, load left out of the
 model: the arm sinks the whole time.*
 
+Also runs on a real arm — see [On a real arm](#on-a-real-arm-zero-stiffness-hand-guiding-on-an-agilex-piper-h).
+
 ## What this is
 
 Teach-by-demonstration programs an industrial arm by example: an operator moves it through a task,
@@ -416,6 +418,29 @@ The safety paths and the path handling work, but bluntly.
   restarts the reference at zero speed, so doing it at cruise speed makes the reference stop dead
   and the PID's D term kicks out a torque spike.
   [Long form](docs/what_broke.md#f13-trajectories-stop-at-every-waypoint-and-pre-emption-is-abrupt).
+
+## On a real arm: zero-stiffness hand guiding on an AgileX Piper-H
+
+![hand guiding](docs/assets/piper_handguide.gif)
+
+*The drivers are at kp = 0, kd = 0. Every motor torque comes from the laptop: τ = s · g(q) from the URDF, at 100 Hz over USB-CAN. You push the arm; it stays where you leave it.* [full clip](https://github.com/giridhar-shenoy/ur5e-teaching-controllers/releases/download/media-2026-11/gravity_comp.mp4)
+
+<!-- markdownlint-disable-next-line MD036 -->
+**What was measured (left arm, Nov 2026)**
+
+- Hands-off hold at zero stiffness: 30 s, drift 0.000 rad/s on the shoulder and elbow at the tuned gains.
+- Per-joint feed-forward scale identified on the arm: shoulder 1.12, elbow 1.00, wrist pitch 0.525 (× model gravity; elbow and wrist with a 1.15 model correction). The firmware's torque gain at zero stiffness, measured: 0.99 / 1.04 / 1.74.
+- Loop: Python, 100 Hz, p99 tick 12 ms; feedback 200 Hz.
+
+<!-- markdownlint-disable-next-line MD036 -->
+**Where it fails**
+
+- The MIT frame on this firmware (S-V1.8-6) carries feed-forward torque in an 8-bit field, ±8 N·m. At full horizontal stretch the shoulder's gravity torque is above that, so zero-stiffness holding is limited to poses under ~7 N·m — a protocol limit, not a tuning one. Later firmware (≥ S-V1.8-8) widens the field to 12 bits, ±16 N·m.
+- Static friction: at zero stiffness a joint moves only when the net torque beats breakaway (up to ~2 N·m on the shoulder), which is what you feel as stick-slip when guiding slowly.
+
+**Tracking, early.** The same frame with a host-side PD term (τ = s·g(q) + Kp e + Kd ė, drivers still at zero) tracks a straight 10 cm tool-centre-point line at 5–8 mm RMS (11–17 mm max) at 0.03 m/s. It is limited by the friction above; whether a faster loop helps is not yet tested. A 200 Hz C++ bridge is in progress (tested so far against a simulated arm); a ros2_control hardware interface on top of it is planned, so these controllers run unchanged. Jogging: next.
+
+**What differs from the UR5e simulation above.** On the Piper the plumbing is the vendor's MIT CAN frame, not ros2_control; the control laws are the same. The Piper code is in a private repository (vendored SDK, hardware-specific runbooks) — available on request.
 
 ## What transfers to a real UR and what does not
 
