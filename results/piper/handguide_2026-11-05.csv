@@ -1,0 +1,6 @@
+kind,joint,scale,kd,D,hold_s,delta_q_rad,tau_over_tff
+hold_trial,j2,1.12,0,0,30.0,0.000,0.971
+hold_trial,j3,1.00,0,0,30.0,0.000,1.035
+gain_median,j2,,,,,,0.985
+gain_median,j3,,,,,,1.042
+gain_median,j5,,,,,,1.742

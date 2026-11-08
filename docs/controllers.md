@@ -111,7 +111,7 @@ would only add a third pole, overshoot and windup under the torque limits. With 
 what is left is $M^{-1}(q)\,\delta(q, \dot q, \ddot q)$, where $\delta$ is the torque error.
 That residual changes with configuration, velocity and acceleration, so an integrator in
 acceleration units only cancels it at rest, and the PID law's integrator already does that
-job. Keeping the outer loop a pure PD also keeps the benchmark honest: the computed-torque
+job. Keeping the outer loop a pure PD also keeps the comparison fair: the computed-torque
 column shows what the model buys on its own, with nothing integrating the model's mistakes away.
 
 **What the benchmark shows** (tables in [results.md](results.md#tracking-full-tables)): both

@@ -157,11 +157,11 @@ The measured F_z differs from Δm·g by at most 0.0001 N over all 9 rows, the la
 records. That agreement holds by construction, so it is a placement check, not a measurement: Gazebo
 (DART) and Pinocchio are given the same URDF and the same gravity (9.81 m/s², the `gravity_z`
 parameter, set explicitly in the worlds), so the benchmark confirms that the payload model enters
-the dynamics at the right place and that a hand-over between controllers is seamless. On a real arm
-this is exactly where friction and model error would appear. Earlier versions of this benchmark
-showed an offset in the hold force; the two causes (SDF's default gravity of 9.8 m/s², and a
-controller that zeroed its torque on deactivation) are described in [what_broke.md](what_broke.md),
-and the hand-recorded offsets are in [its
+the dynamics at the right place and that a hand-over between controllers is smooth (no torque step
+at the hand-over). On a real arm this is exactly where friction and model error would appear.
+Earlier versions of this benchmark showed an offset in the hold force; the two causes (SDF's default
+gravity of 9.8 m/s², and a controller that zeroed its torque on deactivation) are described in
+[what_broke.md](what_broke.md), and the hand-recorded offsets are in [its
 appendix](what_broke.md#appendix-hand-recorded-runs-not-regenerated-by-any-script).
 
 <picture>
