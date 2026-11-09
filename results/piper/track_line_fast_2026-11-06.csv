@@ -1,0 +1,2 @@
+run,clock,Kp,Kd,rms_err_deg_j1,rms_err_deg_j2,rms_err_deg_j3,rms_err_deg_j4,rms_err_deg_j5,max_err_deg_j1,max_err_deg_j2,max_err_deg_j3,max_err_deg_j4,max_err_deg_j5,tcp_off_path_rms_mm,tcp_off_path_max_mm,end
+063727-1,06:38:04.935,30;60;45;2;4,2;3;3;0.2;0.2,0.0,0.675,0.789,0.028,0.419,0.0,1.587,1.489,0.053,1.398,5.6,13.9,done

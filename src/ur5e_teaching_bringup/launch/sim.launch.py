@@ -50,7 +50,7 @@ DYNAMICS_CONTROLLERS = (
 def _controllers_with_params_file(src: str, dynamics_backend: str) -> str:
     """Copy the controllers YAML and point each controller at it (ros2_control 6.10.1 quirk).
 
-    The copy also carries the dynamics_backend launch argument into both effort controllers.
+    The copy also carries the dynamics_backend launch argument into the effort controllers.
     """
     with open(src) as f:
         data = yaml.safe_load(f)
@@ -218,7 +218,7 @@ def generate_launch_description():
             "dynamics_backend",
             default_value="pinocchio",
             choices=["pinocchio", "kdl"],
-            description="Dynamics library of both effort controllers (v0.1 numbers: pinocchio).",
+            description="Dynamics library of the effort controllers (v0.1 numbers: pinocchio).",
         ),
         DeclareLaunchArgument(
             "mode",
